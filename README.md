@@ -22,7 +22,7 @@ The public API (e.g. `Decode` and `DecodeAppend`) are stable and works.  However
 - [ ] Convert Infinity forms to ... (coming soon)
 - [ ] Normalize string escape sequences (coming soon)
 - [ ] Backtick strings
-- [ ] Shell-style # single line comments
+- [x] Shell-style # single line comments
 
 ## Supported JSON Variants
 
@@ -30,18 +30,14 @@ The public API (e.g. `Decode` and `DecodeAppend`) are stable and works.  However
 - [JWCC](https://nigeltao.github.io/blog/2021/json-with-commas-comments.html)
 - [JSON5](https://json5.org)
 - [JSONC #2](https://code.visualstudio.com/docs/languages/json#_json-with-comments)
+- [SON](https://github.com/aleksandergurin/simple-object-notation)
 
 ## Maybe Supported JSON Variants
 
-[HanSON](https://github.com/timjansen/hanson)
-- Need to add backtick quoting
+Requires Backtick quotes:
 
-[SON](https://github.com/aleksandergurin/simple-object-notation)
-- Need shell style single line comments
-
-[JSONX](https://github.com/json-next)
-- Need shell style single line comments
-- Need backtick quoting
+* [HanSON](https://github.com/timjansen/hanson)
+* [JSONX](https://github.com/json-next)
 
 ## Unsupported JSON Variants
 

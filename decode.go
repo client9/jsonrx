@@ -79,6 +79,9 @@ func (tx *jsonRx) Next() (token, error) {
 		case slash:
 			tx.data = tx.data[i:]
 			return tx.comment()
+		case '#':
+			tx.data = tx.data[i:]
+			return tx.comment()
 		default:
 			tx.data = tx.data[i:]
 			return tx.bareword()
@@ -130,6 +133,9 @@ func (tx *jsonRx) string() (token, error) {
 }
 
 func (tx *jsonRx) comment() (token, error) {
+	if tx.data[0] == '#' {
+		return tx.commentSingle()
+	}
 	if len(tx.data) > 1 {
 		switch tx.data[1] {
 		case slash:
@@ -186,7 +192,7 @@ func (tx *jsonRx) commentMulti() (token, error) {
 }
 func (tx *jsonRx) commentSingle() (token, error) {
 	t := token{
-		kind:  '/',
+		kind:  tx.data[0], // is either '/' or '#'
 		value: tx.data,
 		row:   tx.row,
 		col:   tx.col,
@@ -382,7 +388,7 @@ func (rx *jsonRx) Translate(out *bytes.Buffer) error {
 		}
 
 		// ignore comments
-		if t.kind == '/' || t.kind == '*' {
+		if t.kind == '/' || t.kind == '*' || t.kind == '#' {
 			continue
 		}
 
@@ -539,7 +545,7 @@ func (rx *jsonRx) stateComma(t token, out *bytes.Buffer) (State, error) {
 		return StateZero, err
 	}
 
-	if t2.kind == '*' || t2.kind == '/' {
+	if t2.kind == '*' || t2.kind == '/' || t2.kind == '#' {
 		// if comment, reparse
 		return rx.stateComma(t, out)
 	}

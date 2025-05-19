@@ -93,6 +93,12 @@ func TestDecodeComments(t *testing.T) {
 		},
 		{
 			`[1,2,
+			# single line comment
+			3,]`,
+			"[1,2,3]",
+		},
+		{
+			`[1,2,
 			/* multi 
 			   line
 			   comment
