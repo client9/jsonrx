@@ -1,4 +1,4 @@
-package main
+package jsonrx
 
 import (
 	"bytes"
@@ -6,11 +6,6 @@ import (
 	"io"
 	"strconv"
 )
-
-func Decode(dst *bytes.Buffer, src []byte) error {
-	tx := NewJsonRx(src)
-	return tx.Translate(dst)
-}
 
 const leftBrace = '{'
 const rightBrace = '}'
@@ -25,19 +20,19 @@ const newline = '\n'
 const slash = '/'
 const aster = '*'
 
-type Token struct {
+type token struct {
 	kind  byte
 	value []byte
 	row   int
 	col   int
 }
 
-func (t Token) String() string {
+func (t token) String() string {
 	kind := string([]byte{t.kind})
 	return fmt.Sprintf("type %s: %s @ %d:%d", kind, string(t.value), t.row, t.col)
 }
 
-type JsonRx struct {
+type jsonRx struct {
 	row  int
 	col  int
 	data []byte
@@ -45,13 +40,13 @@ type JsonRx struct {
 	stack []byte
 }
 
-func NewJsonRx(b []byte) *JsonRx {
-	return &JsonRx{data: b}
+func newJsonRx(b []byte) *jsonRx {
+	return &jsonRx{data: b}
 }
 
-func (tx *JsonRx) Next() (Token, error) {
+func (tx *jsonRx) Next() (token, error) {
 	if len(tx.data) == 0 {
-		return Token{}, io.EOF
+		return token{}, io.EOF
 	}
 	//fmt.Printf("Left: %q\n", string(tx.data))
 	for i, b := range tx.data {
@@ -59,7 +54,7 @@ func (tx *JsonRx) Next() (Token, error) {
 		// single char tokens
 		case leftBrace, rightBrace, leftBracket, rightBracket, comma, colon:
 			tx.data = tx.data[i:]
-			t := Token{
+			t := token{
 				kind:  b,
 				value: tx.data[0:1],
 				row:   tx.row,
@@ -89,10 +84,10 @@ func (tx *JsonRx) Next() (Token, error) {
 			return tx.bareword()
 		}
 	}
-	return Token{}, io.EOF
+	return token{}, io.EOF
 }
 
-func (tx *JsonRx) string() (Token, error) {
+func (tx *jsonRx) string() (token, error) {
 	qchar := tx.data[0]
 
 	skip := false
@@ -106,7 +101,7 @@ func (tx *JsonRx) string() (Token, error) {
 			// +1 for the first char we skipped in loop
 			// +1 for keeping last quote
 			i += 2
-			t := Token{
+			t := token{
 				kind:  's',
 				value: tx.data[:i],
 				row:   tx.row,
@@ -118,7 +113,7 @@ func (tx *JsonRx) string() (Token, error) {
 			skip = true
 		case newline:
 			if !skip {
-				return Token{}, fmt.Errorf("Unescaped newline in string")
+				return token{}, fmt.Errorf("Unescaped newline in string")
 			}
 			skip = false
 			tx.row += 1
@@ -131,10 +126,10 @@ func (tx *JsonRx) string() (Token, error) {
 		}
 	}
 	// always an error
-	return Token{}, fmt.Errorf("Quoted string fell off edge")
+	return token{}, fmt.Errorf("Quoted string fell off edge")
 }
 
-func (tx *JsonRx) comment() (Token, error) {
+func (tx *jsonRx) comment() (token, error) {
 	if len(tx.data) > 1 {
 		switch tx.data[1] {
 		case slash:
@@ -147,7 +142,7 @@ func (tx *JsonRx) comment() (Token, error) {
 	return tx.bareword()
 }
 
-func (tx *JsonRx) commentMulti() (Token, error) {
+func (tx *jsonRx) commentMulti() (token, error) {
 	endAster := false
 	row := tx.row
 	col := tx.col
@@ -163,7 +158,7 @@ func (tx *JsonRx) commentMulti() (Token, error) {
 		case slash:
 			if endAster {
 				i += 3
-				t := Token{
+				t := token{
 					kind:  '*',
 					value: tx.data[:i],
 					row:   row,
@@ -180,7 +175,7 @@ func (tx *JsonRx) commentMulti() (Token, error) {
 
 	// multi-line comment wasn't closed
 
-	t := Token{
+	t := token{
 		kind:  '*',
 		value: tx.data[:i],
 		row:   row,
@@ -189,8 +184,8 @@ func (tx *JsonRx) commentMulti() (Token, error) {
 	tx.data = tx.data[i:]
 	return t, nil
 }
-func (tx *JsonRx) commentSingle() (Token, error) {
-	t := Token{
+func (tx *jsonRx) commentSingle() (token, error) {
+	t := token{
 		kind:  '/',
 		value: tx.data,
 		row:   tx.row,
@@ -207,7 +202,7 @@ func (tx *JsonRx) commentSingle() (Token, error) {
 	return t, nil
 }
 
-func (tx *JsonRx) hexnumber() (Token, error) {
+func (tx *jsonRx) hexnumber() (token, error) {
 
 	kind := byte('2')
 
@@ -217,7 +212,7 @@ func (tx *JsonRx) hexnumber() (Token, error) {
 
 		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n':
 
-			t := Token{
+			t := token{
 				kind:  kind,
 				value: tx.data[:i+2],
 				row:   tx.row,
@@ -236,7 +231,7 @@ func (tx *JsonRx) hexnumber() (Token, error) {
 		}
 	}
 	// fell off the edge
-	t := Token{
+	t := token{
 		kind:  kind,
 		value: tx.data,
 		row:   tx.row,
@@ -246,7 +241,7 @@ func (tx *JsonRx) hexnumber() (Token, error) {
 	tx.data = []byte{}
 	return t, nil
 }
-func (tx *JsonRx) number() (Token, error) {
+func (tx *jsonRx) number() (token, error) {
 
 	// check if starts with "0x"
 	if len(tx.data) > 2 && tx.data[0] == '0' && (tx.data[1] == 'x' || tx.data[1] == 'X') {
@@ -257,7 +252,7 @@ func (tx *JsonRx) number() (Token, error) {
 		switch b {
 
 		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n':
-			t := Token{
+			t := token{
 				kind:  kind,
 				value: tx.data[:i],
 				row:   tx.row,
@@ -283,7 +278,7 @@ func (tx *JsonRx) number() (Token, error) {
 		}
 	}
 	// fell off the edge
-	t := Token{
+	t := token{
 		kind:  kind,
 		value: tx.data,
 		row:   tx.row,
@@ -322,11 +317,11 @@ func isFalse(b []byte) bool {
 		b[3] == 's' &&
 		b[4] == 'e'
 }
-func (tx *JsonRx) bareword() (Token, error) {
+func (tx *jsonRx) bareword() (token, error) {
 	for i, b := range tx.data {
 		switch b {
 		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n':
-			t := Token{
+			t := token{
 				kind:  'w',
 				value: tx.data[0:i],
 				row:   tx.row,
@@ -339,7 +334,7 @@ func (tx *JsonRx) bareword() (Token, error) {
 		}
 	}
 	// fell off the edge
-	t := Token{
+	t := token{
 		kind:  'w',
 		value: tx.data,
 		row:   tx.row,
@@ -354,7 +349,7 @@ type State int
 
 const (
 	StateZero State = iota
-	StateValue
+	stateValue
 	StateObjectStart
 	StateObjectAfterStart
 	StateObjectEnd
@@ -369,13 +364,19 @@ const (
 	StateAfterContainer
 )
 
-func (rx *JsonRx) Translate(out *bytes.Buffer) error {
+func (rx *jsonRx) Translate(out *bytes.Buffer) error {
 	rx.stack = []byte{}
 	var err error
-	var t Token
-	state := StateValue
+	var t token
+	state := stateValue
 	for {
 		t, err = rx.Next()
+		if err == io.EOF {
+			if len(rx.stack) == 0 {
+				return nil
+			}
+			return fmt.Errorf("Got EOF midway")
+		}
 		if err != nil {
 			return err
 		}
@@ -387,7 +388,7 @@ func (rx *JsonRx) Translate(out *bytes.Buffer) error {
 
 		//fmt.Printf("STATE: %d with token %s\n", state, t)
 		switch state {
-		case StateValue:
+		case stateValue:
 			state, err = rx.stateValue(t, out)
 			if err != nil {
 				return err
@@ -430,7 +431,7 @@ func (rx *JsonRx) Translate(out *bytes.Buffer) error {
 	return nil
 }
 
-func (rx *JsonRx) stateValue(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateValue(t token, out *bytes.Buffer) (State, error) {
 	switch t.kind {
 	case leftBrace:
 		return rx.stateObjectStart(t, out)
@@ -454,13 +455,13 @@ func (rx *JsonRx) stateValue(t Token, out *bytes.Buffer) (State, error) {
 	}
 	return StateZero, fmt.Errorf("Unknown token for value")
 }
-func (rx *JsonRx) stateObjectStart(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateObjectStart(t token, out *bytes.Buffer) (State, error) {
 	out.WriteByte('{')
 	rx.stack = append(rx.stack, '{')
 	return StateObjectAfterStart, nil
 }
 
-func (rx *JsonRx) stateObjectAfterStart(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateObjectAfterStart(t token, out *bytes.Buffer) (State, error) {
 
 	switch t.kind {
 	case '}':
@@ -472,7 +473,7 @@ func (rx *JsonRx) stateObjectAfterStart(t Token, out *bytes.Buffer) (State, erro
 	return rx.stateObjectKey(t, out)
 
 }
-func (rx *JsonRx) stateObjectKey(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateObjectKey(t token, out *bytes.Buffer) (State, error) {
 
 	switch t.kind {
 	case 's':
@@ -487,7 +488,7 @@ func (rx *JsonRx) stateObjectKey(t Token, out *bytes.Buffer) (State, error) {
 
 }
 
-func (rx *JsonRx) stateObjectAfterKey(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateObjectAfterKey(t token, out *bytes.Buffer) (State, error) {
 
 	if t.kind == ':' {
 		out.Write(t.value)
@@ -497,7 +498,7 @@ func (rx *JsonRx) stateObjectAfterKey(t Token, out *bytes.Buffer) (State, error)
 	return StateZero, fmt.Errorf("Invalid token after Object Key")
 }
 
-func (rx *JsonRx) stateObjectValue(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateObjectValue(t token, out *bytes.Buffer) (State, error) {
 	switch t.kind {
 	case 's':
 		out.Write(writeString(t.value))
@@ -521,7 +522,7 @@ func (rx *JsonRx) stateObjectValue(t Token, out *bytes.Buffer) (State, error) {
 	}
 	return StateZero, fmt.Errorf("Unknown token for object value - %s", t)
 }
-func (rx *JsonRx) stateObjectAfterValue(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateObjectAfterValue(t token, out *bytes.Buffer) (State, error) {
 	switch t.kind {
 	case '}':
 		return rx.stateObjectEnd(t, out)
@@ -530,7 +531,7 @@ func (rx *JsonRx) stateObjectAfterValue(t Token, out *bytes.Buffer) (State, erro
 	}
 	return StateZero, fmt.Errorf("Unknown token after object value - %s", t)
 }
-func (rx *JsonRx) stateComma(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateComma(t token, out *bytes.Buffer) (State, error) {
 	// check if next token is "}"
 
 	t2, err := rx.Next()
@@ -560,7 +561,7 @@ func (rx *JsonRx) stateComma(t Token, out *bytes.Buffer) (State, error) {
 	// it's an array value
 	return rx.stateArrayValue(t2, out)
 }
-func (rx *JsonRx) stateObjectEnd(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateObjectEnd(t token, out *bytes.Buffer) (State, error) {
 	stack := rx.stack
 	if len(stack) == 0 || stack[len(stack)-1] != '{' {
 		return StateZero, fmt.Errorf("Unmatched object end, level=%d, stack=%q", len(stack), string(stack))
@@ -570,7 +571,7 @@ func (rx *JsonRx) stateObjectEnd(t Token, out *bytes.Buffer) (State, error) {
 	return StateAfterContainer, nil
 }
 
-func (rx *JsonRx) stateAfterContainer(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateAfterContainer(t token, out *bytes.Buffer) (State, error) {
 
 	switch t.kind {
 	case '}':
@@ -582,12 +583,12 @@ func (rx *JsonRx) stateAfterContainer(t Token, out *bytes.Buffer) (State, error)
 	}
 	return StateZero, fmt.Errorf("unknown token after end of array or object")
 }
-func (rx *JsonRx) stateArrayStart(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateArrayStart(t token, out *bytes.Buffer) (State, error) {
 	out.WriteByte('[')
 	rx.stack = append(rx.stack, '[')
 	return StateArrayAfterStart, nil
 }
-func (rx *JsonRx) stateArrayAfterStart(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateArrayAfterStart(t token, out *bytes.Buffer) (State, error) {
 
 	switch t.kind {
 	case ']':
@@ -598,7 +599,7 @@ func (rx *JsonRx) stateArrayAfterStart(t Token, out *bytes.Buffer) (State, error
 	}
 	return rx.stateArrayValue(t, out)
 }
-func (rx *JsonRx) stateArrayEnd(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateArrayEnd(t token, out *bytes.Buffer) (State, error) {
 	stack := rx.stack
 	if len(stack) == 0 || stack[len(stack)-1] != '[' {
 		return StateZero, fmt.Errorf("Unmatched array end")
@@ -607,7 +608,7 @@ func (rx *JsonRx) stateArrayEnd(t Token, out *bytes.Buffer) (State, error) {
 	rx.stack = stack[:len(stack)-1]
 	return StateAfterContainer, nil
 }
-func (rx *JsonRx) stateArrayValue(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateArrayValue(t token, out *bytes.Buffer) (State, error) {
 	switch t.kind {
 	case 's':
 		out.Write(writeString(t.value))
@@ -632,7 +633,7 @@ func (rx *JsonRx) stateArrayValue(t Token, out *bytes.Buffer) (State, error) {
 	return StateZero, fmt.Errorf("Unknown token for array value - %s", t)
 }
 
-func (rx *JsonRx) stateArrayAfterValue(t Token, out *bytes.Buffer) (State, error) {
+func (rx *jsonRx) stateArrayAfterValue(t token, out *bytes.Buffer) (State, error) {
 	switch t.kind {
 	case ']':
 		return rx.stateArrayEnd(t, out)

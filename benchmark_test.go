@@ -1,4 +1,4 @@
-package main
+package jsonrx
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ func BenchmarkDecodeTokens(b *testing.B) {
 	}
 
 	for b.Loop() {
-		rx := NewJsonRx(data)
+		rx := newJsonRx(data)
 		for {
 			_, err := rx.Next()
 			if err == io.EOF {
@@ -40,7 +40,7 @@ func BenchmarkDecodeFile(b *testing.B) {
 
 	for b.Loop() {
 		dst.Reset()
-		err := Decode(&dst, data)
+		err := DecodeAppend(&dst, data)
 		if err != nil && err != io.EOF {
 			b.Errorf("JsonRx - Decode failed %v", err)
 		}
@@ -52,7 +52,7 @@ func BenchmarkJson(b *testing.B) {
 		log.Fatalf("Cant read file - %v", err)
 	}
 	var dst bytes.Buffer
-	err = Decode(&dst, data)
+	err = DecodeAppend(&dst, data)
 	if err != nil && err != io.EOF {
 		b.Errorf("JsonRx - Decode failed %v", err)
 	}

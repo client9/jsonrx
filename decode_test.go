@@ -1,8 +1,6 @@
-package main
+package jsonrx
 
 import (
-	"bytes"
-	"io"
 	"testing"
 )
 
@@ -34,9 +32,11 @@ func TestDecodeIdentity(t *testing.T) {
 		"{\"foo\":\"bar\",\"rock\":{}}",
 	}
 	for _, tt := range cases {
-		var dst bytes.Buffer
-		Decode(&dst, []byte(tt))
-		got := dst.String()
+		out, err := Decode([]byte(tt))
+		if err != nil {
+			t.Errorf("Got unexpected error: %v", err)
+		}
+		got := string(out)
 		if tt != got {
 			t.Errorf("Expected %q got %q", tt, got)
 		}
@@ -73,12 +73,11 @@ func TestDecodeComma(t *testing.T) {
 		},
 	}
 	for _, tt := range cases {
-		var dst bytes.Buffer
-		err := Decode(&dst, []byte(tt.in))
-		if err != nil && err != io.EOF {
-			t.Errorf("Got error: %v", err)
+		out, err := Decode([]byte(tt.in))
+		if err != nil {
+			t.Errorf("Got unexpected error: %v", err)
 		}
-		got := dst.String()
+		got := string(out)
 		if tt.out != got {
 			t.Errorf("Expected %q got %q", tt.out, got)
 		}
@@ -103,13 +102,11 @@ func TestDecodeComments(t *testing.T) {
 		},
 	}
 	for _, tt := range cases {
-		var dst bytes.Buffer
-		err := Decode(&dst, []byte(tt.in))
-
-		if err != nil && err != io.EOF {
+		out, err := Decode([]byte(tt.in))
+		if err != nil {
 			t.Errorf("Got error: %v", err)
 		}
-		got := dst.String()
+		got := string(out)
 		if tt.out != got {
 			t.Errorf("Expected %q got %q", tt.out, got)
 		}
@@ -144,13 +141,11 @@ func TestDecodeNumbers(t *testing.T) {
 	}
 
 	for _, tt := range cases {
-		var dst bytes.Buffer
-		err := Decode(&dst, []byte(tt.in))
-
-		if err != nil && err != io.EOF {
+		out, err := Decode([]byte(tt.in))
+		if err != nil {
 			t.Errorf("Got error: %v", err)
 		}
-		got := dst.String()
+		got := string(out)
 		if tt.out != got {
 			t.Errorf("Expected %q got %q", tt.out, got)
 		}
