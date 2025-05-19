@@ -1,0 +1,109 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"testing"
+)
+
+func BenchmarkDecodeTokens(b *testing.B) {
+	data, err := os.ReadFile("samples/runtime_enabled_features.json5")
+	if err != nil {
+		log.Fatalf("Cant read file - %v", err)
+	}
+
+	for b.Loop() {
+		rx := NewJsonRx(data)
+		for {
+			_, err := rx.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatalf("Unexpected error %v ", err)
+			}
+		}
+	}
+}
+func BenchmarkDecodeFile(b *testing.B) {
+	data, err := os.ReadFile("samples/runtime_enabled_features.json5")
+	if err != nil {
+		log.Fatalf("Cant read file - %v", err)
+	}
+
+	dst := bytes.Buffer{}
+	dst.Grow(len(data))
+
+	for b.Loop() {
+		dst.Reset()
+		err := Decode(&dst, data)
+		if err != nil && err != io.EOF {
+			b.Errorf("JsonRx - Decode failed %v", err)
+		}
+	}
+}
+func BenchmarkJson(b *testing.B) {
+	data, err := os.ReadFile("samples/runtime_enabled_features.json5")
+	if err != nil {
+		log.Fatalf("Cant read file - %v", err)
+	}
+	var dst bytes.Buffer
+	err = Decode(&dst, data)
+	if err != nil && err != io.EOF {
+		b.Errorf("JsonRx - Decode failed %v", err)
+	}
+	data = dst.Bytes()
+	fmt.Printf("Final size: %d\n", len(data))
+	for b.Loop() {
+		var out map[string]any
+		err := json.Unmarshal(data, &out)
+		if err != nil && err != io.EOF {
+			b.Errorf("Decode failed %v", err)
+		}
+	}
+}
+
+func BenchmarkInt(b *testing.B) {
+	data := []byte("123456789")
+	for b.Loop() {
+		_ = writeInt(data)
+	}
+}
+func BenchmarkFloat(b *testing.B) {
+	data := []byte("1.23456789")
+	for b.Loop() {
+		_ = writeFloat(data)
+	}
+}
+func BenchmarkHex(b *testing.B) {
+	data := []byte("0xDEADbeef")
+	for b.Loop() {
+		_ = writeHex(data)
+	}
+}
+func BenchmarkString(b *testing.B) {
+	data := []byte("\"a quoted string\"")
+	for b.Loop() {
+		_ = writeString(data)
+	}
+}
+func BenchmarkQuotedFast(b *testing.B) {
+	data := []byte("abcdefgh1234567890")
+	out := bytes.Buffer{}
+	for b.Loop() {
+		out.Reset()
+		writeQuoted(data, &out)
+	}
+}
+func BenchmarkQuotedSlow(b *testing.B) {
+	data := []byte("abcdefgh\\n1234567890")
+	out := bytes.Buffer{}
+	for b.Loop() {
+		out.Reset()
+		writeQuoted(data, &out)
+	}
+}
