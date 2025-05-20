@@ -100,8 +100,8 @@ func TestDecodeComments(t *testing.T) {
 		{
 			`[1,2,
 			/* multi 
-			   line
-			   comment
+			line
+			comment
 			*/
 			3,]`,
 			"[1,2,3]",
@@ -154,6 +154,36 @@ func TestDecodeNumbers(t *testing.T) {
 		got := string(out)
 		if tt.out != got {
 			t.Errorf("Expected %q got %q", tt.out, got)
+		}
+	}
+}
+func TestDecodeStrings(t *testing.T) {
+	cases := []testcase{
+		{
+			"\"foo\"",
+			"\"foo\"",
+		},
+		{
+			"'foo'",
+			"\"foo\"",
+		},
+		{
+			"`foo`",
+			"\"foo\"",
+		},
+		{
+			"`foo\nbar`",
+			"\"foo\\nbar\"",
+		},
+	}
+	for _, tt := range cases {
+		out, err := Decode([]byte(tt.in))
+		if err != nil {
+			t.Errorf("Got error: %v", err)
+		}
+		got := string(out)
+		if tt.out != got {
+			t.Errorf("Expected %s got %s", tt.out, got)
 		}
 	}
 }

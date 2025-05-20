@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
+	"strings"
 )
 
 const leftBrace = '{'
@@ -15,6 +17,7 @@ const comma = ','
 const colon = ':'
 const singleQuote = '\''
 const doubleQuote = '"'
+const backQuote = '`'
 const backslash = '\\'
 const newline = '\n'
 const slash = '/'
@@ -70,7 +73,7 @@ func (tx *jsonRx) Next() (token, error) {
 			tx.row += 1
 			tx.col = 0
 			continue
-		case singleQuote, doubleQuote:
+		case singleQuote, doubleQuote, backQuote:
 			tx.data = tx.data[i:]
 			return tx.string()
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '-', '.':
@@ -115,6 +118,11 @@ func (tx *jsonRx) string() (token, error) {
 		case backslash:
 			skip = true
 		case newline:
+			if !skip && qchar == backQuote {
+				tx.row += 1
+				continue
+			}
+
 			if !skip {
 				return token{}, fmt.Errorf("Unescaped newline in string")
 			}
@@ -165,7 +173,7 @@ func (tx *jsonRx) commentMulti() (token, error) {
 			if endAster {
 				i += 3
 				t := token{
-					kind:  '*',
+					kind:  'c',
 					value: tx.data[:i],
 					row:   row,
 					col:   col,
@@ -182,7 +190,7 @@ func (tx *jsonRx) commentMulti() (token, error) {
 	// multi-line comment wasn't closed
 
 	t := token{
-		kind:  '*',
+		kind:  'c',
 		value: tx.data[:i],
 		row:   row,
 		col:   col,
@@ -192,7 +200,7 @@ func (tx *jsonRx) commentMulti() (token, error) {
 }
 func (tx *jsonRx) commentSingle() (token, error) {
 	t := token{
-		kind:  tx.data[0], // is either '/' or '#'
+		kind:  'c',
 		value: tx.data,
 		row:   tx.row,
 		col:   tx.col,
@@ -388,7 +396,7 @@ func (rx *jsonRx) Translate(out *bytes.Buffer) error {
 		}
 
 		// ignore comments
-		if t.kind == '/' || t.kind == '*' || t.kind == '#' {
+		if t.kind == 'c' {
 			continue
 		}
 
@@ -444,7 +452,7 @@ func (rx *jsonRx) stateValue(t token, out *bytes.Buffer) (State, error) {
 	case leftBracket:
 		return rx.stateArrayStart(t, out)
 	case 's':
-		out.Write(writeString(t.value))
+		writeString(out, t.value)
 		return StateObjectAfterValue, nil
 	case '0':
 		out.Write(writeInt(t.value))
@@ -483,7 +491,7 @@ func (rx *jsonRx) stateObjectKey(t token, out *bytes.Buffer) (State, error) {
 
 	switch t.kind {
 	case 's':
-		out.Write(writeString(t.value))
+		writeString(out, t.value)
 		return StateObjectAfterKey, nil
 	case 'w', '0', '1', '2':
 		// whatever it is, it's always quoted
@@ -507,7 +515,7 @@ func (rx *jsonRx) stateObjectAfterKey(t token, out *bytes.Buffer) (State, error)
 func (rx *jsonRx) stateObjectValue(t token, out *bytes.Buffer) (State, error) {
 	switch t.kind {
 	case 's':
-		out.Write(writeString(t.value))
+		writeString(out, t.value)
 		return StateObjectAfterValue, nil
 	case 'w':
 		out.Write(bareword(t.value))
@@ -545,7 +553,7 @@ func (rx *jsonRx) stateComma(t token, out *bytes.Buffer) (State, error) {
 		return StateZero, err
 	}
 
-	if t2.kind == '*' || t2.kind == '/' || t2.kind == '#' {
+	if t2.kind == 'c' {
 		// if comment, reparse
 		return rx.stateComma(t, out)
 	}
@@ -617,7 +625,7 @@ func (rx *jsonRx) stateArrayEnd(t token, out *bytes.Buffer) (State, error) {
 func (rx *jsonRx) stateArrayValue(t token, out *bytes.Buffer) (State, error) {
 	switch t.kind {
 	case 's':
-		out.Write(writeString(t.value))
+		writeString(out, t.value))
 		return StateArrayAfterValue, nil
 	case 'w':
 		out.Write(bareword(t.value))
@@ -814,23 +822,47 @@ func bareword(b []byte) []byte {
 	return b
 }
 
-func writeString(b []byte) []byte {
-	// if single quote make it a double quote
-	//qchar := b[0]
-	b[0] = '"'
-	b[len(b)-1] = '"'
+// writeString takes an "quoted string with escapes" and converts to a JSON-spec string.
+// it needs to handle
+//
+//   * single quote strings
+//   * double quote strings
+//   * backtick quote strings
+//
+// all with a variety of escape sequences.
+//
+//
+func writeString(out *bytes.Buffer, src []byte) {
+	// get quote type
+	qchar := src[0]
 
-	// scan for fast case
+	// strip off quotes
+	src := src[1:len(src)-1]
+
+	// do we need to decode anything?
 	hasEscape := false
-	for _, c := range b {
-		if c == '\\' {
+	for _, b := range src {
+		if b < utf8.RuneSelf && !safeSet[b] {
 			hasEscape = true
 			break
 		}
 	}
 
 	if !hasEscape {
-		return b
+		out.WriteByte('"')
+		out.Write(src)
+		out.WriteByte('"')
+		return
+	}
+
+	skip := false
+	for _, b := range 
+
+	if qchar == backQuote {
+		// no need to unescape first
+		// directly encode
+		writeQuote(string(b[1:len(b)-1]), out)
+		return
 	}
 
 	// TERRIBLE
@@ -838,12 +870,14 @@ func writeString(b []byte) []byte {
 	// Unquote can fail if
 	//  - missing starting or ending quotes
 	//  - contains embedded raw newline
-	val, err := strconv.Unquote(string(b))
+	bs := string(b)
+	bs = strings.ReplaceAll(bs, "\n", "\\n")
+	val, err := strconv.Unquote(bs)
 	if err != nil {
-		panic("strconv.Unquote failed unexpectedly ")
+		log.Fatalf("strconv.Unquote failed unexpectedly: %v", err)
 	}
-	out := fmt.Sprintf("%q", string(val))
-	return []byte(out)
+	writeQuote(val,out)
+	return
 }
 
 var zeroCharArray = []byte{'0'}
@@ -854,23 +888,24 @@ var objectEnd = []byte{'}'}
 var arrayStart = []byte{'['}
 var arrayEnd = []byte{']'}
 
-func writeQuoted(b []byte, out *bytes.Buffer) {
-	// scan for fast case
-	hasEscape := false
-	for _, c := range b {
-		if c == '\\' {
-			hasEscape = true
-			break
+func writeQuoted(src []byte, out *bytes.Buffer) {
+	/*
+		hasEscape := false
+		for _, b := range src {
+			if b < utf8.RuneSelf && !safeSet[b] {
+				hasEscape = true
+				break
+			}
 		}
-	}
 
-	if !hasEscape {
-		out.WriteByte('"')
-		out.Write(b)
-		out.WriteByte('"')
-		return
-	}
-
-	buf := fmt.Sprintf("%q", string(b))
-	out.Write([]byte(buf))
+		if !hasEscape {
+			out.WriteByte('"')
+			out.Write(src)
+			out.WriteByte('"')
+			return
+		}
+	*/
+	buf := out.AvailableBuffer()
+	buf = appendString(buf, src)
+	out.Write(buf)
 }
