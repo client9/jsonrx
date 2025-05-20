@@ -62,7 +62,7 @@ func BenchmarkJson(b *testing.B) {
 		var out map[string]any
 		err := json.Unmarshal(data, &out)
 		if err != nil && err != io.EOF {
-			b.Errorf("Decode failed %v", err)
+			b.Fatalf("Decode failed %v", err)
 		}
 	}
 }
