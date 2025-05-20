@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const leftBrace = '{'
@@ -625,7 +626,7 @@ func (rx *jsonRx) stateArrayEnd(t token, out *bytes.Buffer) (State, error) {
 func (rx *jsonRx) stateArrayValue(t token, out *bytes.Buffer) (State, error) {
 	switch t.kind {
 	case 's':
-		writeString(out, t.value))
+		writeString(out, t.value)
 		return StateArrayAfterValue, nil
 	case 'w':
 		out.Write(bareword(t.value))
@@ -825,19 +826,17 @@ func bareword(b []byte) []byte {
 // writeString takes an "quoted string with escapes" and converts to a JSON-spec string.
 // it needs to handle
 //
-//   * single quote strings
-//   * double quote strings
-//   * backtick quote strings
+//   - single quote strings
+//   - double quote strings
+//   - backtick quote strings
 //
 // all with a variety of escape sequences.
-//
-//
 func writeString(out *bytes.Buffer, src []byte) {
 	// get quote type
 	qchar := src[0]
 
 	// strip off quotes
-	src := src[1:len(src)-1]
+	src = src[1 : len(src)-1]
 
 	// do we need to decode anything?
 	hasEscape := false
@@ -855,13 +854,10 @@ func writeString(out *bytes.Buffer, src []byte) {
 		return
 	}
 
-	skip := false
-	for _, b := range 
-
 	if qchar == backQuote {
 		// no need to unescape first
 		// directly encode
-		writeQuote(string(b[1:len(b)-1]), out)
+		writeQuoted(src, out)
 		return
 	}
 
@@ -870,13 +866,13 @@ func writeString(out *bytes.Buffer, src []byte) {
 	// Unquote can fail if
 	//  - missing starting or ending quotes
 	//  - contains embedded raw newline
-	bs := string(b)
+	bs := string(src)
 	bs = strings.ReplaceAll(bs, "\n", "\\n")
 	val, err := strconv.Unquote(bs)
 	if err != nil {
 		log.Fatalf("strconv.Unquote failed unexpectedly: %v", err)
 	}
-	writeQuote(val,out)
+	writeQuoted([]byte(val), out)
 	return
 }
 

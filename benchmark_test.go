@@ -87,8 +87,10 @@ func BenchmarkHex(b *testing.B) {
 }
 func BenchmarkString(b *testing.B) {
 	data := []byte("\"a quoted string\"")
+	out := bytes.Buffer{}
 	for b.Loop() {
-		_ = writeString(data)
+		out.Reset()
+		writeString(&out, data)
 	}
 }
 func BenchmarkQuotedFast(b *testing.B) {
