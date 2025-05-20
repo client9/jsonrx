@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -714,6 +712,7 @@ func writeInt(b0 []byte) []byte {
 	return b
 }
 
+/*
 func writeInt2(b []byte) []byte {
 	s := string(b)
 	numInt, err := strconv.ParseInt(s, 10, 64)
@@ -754,6 +753,7 @@ func writeInt2(b []byte) []byte {
 	}
 	return b
 }
+*/
 
 // Unoptimized since it's a rare feature
 func writeHex(b []byte) []byte {
@@ -855,24 +855,16 @@ func writeString(out *bytes.Buffer, src []byte) {
 	}
 
 	if qchar == backQuote {
-		// no need to unescape first
-		// directly encode
+		// TBD: ERROR -- \` needs to be unescaped.
+		//
+		// no need to unescape first -- directly encode
 		writeQuoted(src, out)
 		return
 	}
 
-	// TERRIBLE
-	//
-	// Unquote can fail if
-	//  - missing starting or ending quotes
-	//  - contains embedded raw newline
-	bs := string(src)
-	bs = strings.ReplaceAll(bs, "\n", "\\n")
-	val, err := strconv.Unquote(bs)
-	if err != nil {
-		log.Fatalf("strconv.Unquote failed unexpectedly: %v", err)
-	}
-	writeQuoted([]byte(val), out)
+	buf := out.AvailableBuffer()
+	buf = appendRecodeString(buf, src)
+	out.Write(buf)
 	return
 }
 

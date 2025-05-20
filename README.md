@@ -7,8 +7,6 @@ The public API of `Decode` and `DecodeAppend` are stable and works.
 
 * However a lot more work needs to be done on error cases.  Row/Collum numbers on errors are likely wrong
 
-* Conversion of string escape sequences in double/single/back needs work.
-
 ## What does it do?
 
 - [x] Remove trailing commas (JSON5, JWCC, HuJSON)
@@ -25,7 +23,8 @@ The public API of `Decode` and `DecodeAppend` are stable and works.
 - [x] Normalize floats ".5" to "0.5"
 - [ ] Convert NaN forms  ... (coming soon)
 - [ ] Convert Infinity forms to ... (coming soon)
-- [ ] Normalize string escape sequences (coming soon)
+- [x] Normalize string escape sequences (mostly done)
+- [ ] Convert \x?? hex escapes
 
 ## Supported JSON Variants
 
