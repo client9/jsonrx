@@ -15,6 +15,7 @@ The public API of `Decode` and `DecodeAppend` are stable and works.
 - [x] Ensure object key names are double quoted (JSON5)
 - [x] Convert single-quoted strings to double quoted JSON.
 - [x] Convert backtick string to double quoted JSON strings.
+- [x] Convert multiline end-of-line escapes (backslash at end of line).
 - [x] Remove single line '//' comments (C/Java/Go single line)(JSON5, JWCC, HuJSON)
 - [x] Remove multiline '/* ... */' comments (JSON5, JWCC, HuJSON)
 - [x] Remove shell-style # single line comments
@@ -33,8 +34,8 @@ The public API of `Decode` and `DecodeAppend` are stable and works.
 - [JSON5](https://json5.org)
 - [JSONC #2](https://code.visualstudio.com/docs/languages/json#_json-with-comments)
 - [SON](https://github.com/aleksandergurin/simple-object-notation)
-* [HanSON](https://github.com/timjansen/hanson)
-* [JSONX](https://github.com/json-next)
+- [HanSON](https://github.com/timjansen/hanson)
+- [JSONX](https://github.com/json-next)
 
 ## Additional Reading
 
