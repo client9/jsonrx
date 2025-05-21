@@ -11,7 +11,7 @@ import (
 )
 
 func BenchmarkDecodeTokens(b *testing.B) {
-	data, err := os.ReadFile("samples/runtime_enabled_features.json5")
+	data, err := os.ReadFile("samples/chromium/runtime_enabled_features.json5")
 	if err != nil {
 		log.Fatalf("Cant read file - %v", err)
 	}
@@ -30,7 +30,7 @@ func BenchmarkDecodeTokens(b *testing.B) {
 	}
 }
 func BenchmarkDecodeFile(b *testing.B) {
-	data, err := os.ReadFile("samples/runtime_enabled_features.json5")
+	data, err := os.ReadFile("samples/chromium/runtime_enabled_features.json5")
 	if err != nil {
 		log.Fatalf("Cant read file - %v", err)
 	}
@@ -47,7 +47,7 @@ func BenchmarkDecodeFile(b *testing.B) {
 	}
 }
 func BenchmarkJson(b *testing.B) {
-	data, err := os.ReadFile("samples/runtime_enabled_features.json5")
+	data, err := os.ReadFile("samples/chromium/runtime_enabled_features.json5")
 	if err != nil {
 		log.Fatalf("Cant read file - %v", err)
 	}
