@@ -69,28 +69,34 @@ func BenchmarkJson(b *testing.B) {
 
 func BenchmarkInt(b *testing.B) {
 	data := []byte("123456789")
+	out := &bytes.Buffer{}
 	for b.Loop() {
-		_ = writeInt(data)
+		out.Reset()
+		writeInt(out, data)
 	}
 }
-func BenchmarkFloat(b *testing.B) {
+func BenchmarkFloatFast(b *testing.B) {
 	data := []byte("1.23456789")
+	out := &bytes.Buffer{}
 	for b.Loop() {
-		_ = writeFloat(data)
+		out.Reset()
+		writeFloat(out, data)
 	}
 }
 func BenchmarkHex(b *testing.B) {
 	data := []byte("0xDEADbeef")
+	out := &bytes.Buffer{}
 	for b.Loop() {
-		_ = writeHex(data)
+		out.Reset()
+		writeHex(out, data)
 	}
 }
 func BenchmarkString(b *testing.B) {
 	data := []byte("\"a quoted string\"")
-	out := bytes.Buffer{}
+	out := &bytes.Buffer{}
 	for b.Loop() {
 		out.Reset()
-		writeString(&out, data)
+		writeString(out, data)
 	}
 }
 func BenchmarkQuotedFast(b *testing.B) {

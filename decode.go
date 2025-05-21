@@ -64,16 +64,16 @@ func stateValue(d *decoder, t token) error {
 		writeString(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '0':
-		d.out.Write(writeInt(t.value))
+		writeInt(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '1':
-		d.out.Write(writeFloat(t.value))
+		writeFloat(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '2':
-		d.out.Write(writeHex(t.value))
+		writeHex(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case 'w':
-		d.out.Write(bareword(t.value))
+		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
 	default:
 		return fmt.Errorf("Unknown token for value")
@@ -131,16 +131,16 @@ func stateObjectValue(d *decoder, t token) error {
 		writeString(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case 'w':
-		d.out.Write(bareword(t.value))
+		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '0':
-		d.out.Write(writeInt(t.value))
+		writeInt(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '1':
-		d.out.Write(writeFloat(t.value))
+		writeFloat(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '2':
-		d.out.Write(writeHex(t.value))
+		writeHex(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '{':
 		return stateObjectStart(d, t)
@@ -269,16 +269,16 @@ func stateArrayValue(d *decoder, t token) error {
 		writeString(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case 'w':
-		d.out.Write(bareword(t.value))
+		bareword(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case '0':
-		d.out.Write(writeInt(t.value))
+		writeInt(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case '1':
-		d.out.Write(writeFloat(t.value))
+		writeFloat(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case '2':
-		d.out.Write(writeHex(t.value))
+		writeHex(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case '{':
 		return stateObjectStart(d, t)
@@ -336,13 +336,11 @@ func isFalse(b []byte) bool {
 		b[4] == 'e'
 }
 
-var zeroCharArray = []byte{'0'}
+func writeInt(out *bytes.Buffer, b0 []byte) {
 
-func writeInt(b0 []byte) []byte {
-
-	// asset -- should never happen
+	// assert -- should never happen
 	if len(b0) == 0 {
-		return nil
+		return
 	}
 
 	b := b0
@@ -369,10 +367,12 @@ func writeInt(b0 []byte) []byte {
 	}
 
 	if overflow {
-		return writeFloat(b0)
+		writeFloat(out, b0)
+		return
 	}
 	if notint {
-		return bareword(b0)
+		bareword(out, b0)
+		return
 	}
 
 	b = b0
@@ -388,62 +388,67 @@ func writeInt(b0 []byte) []byte {
 	}
 	if len(b) == 0 {
 		// "+00000" or "0000"
-		return zeroCharArray
+		out.WriteByte('0')
+		return
 	}
 
-	return b
+	out.Write(b)
 }
 
 // Unoptimized since it's a rare feature
-func writeHex(b []byte) []byte {
+func writeHex(out *bytes.Buffer, b []byte) {
 
 	// need to slice off initial "0x" or "0X"
 	s := string(b[2:])
 	numInt, err := strconv.ParseInt(s, 16, 64)
 	if err == nil {
-		buf := []byte{}
-		buf = strconv.AppendInt(buf, numInt, 10)
-		return buf
-		//return []byte(strconv.FormatInt(numInt, 10))
+		out.WriteString(strconv.FormatInt(numInt, 10))
+		return
 	}
 	// TODO - Overflow
-	return b
+	bareword(out, b)
+	return
 }
 
-func writeFloat(b []byte) []byte {
+func writeFloat(out *bytes.Buffer, b []byte) {
 	if isValidNumber(b) {
-		return b
+		out.Write(b)
+		return
 	}
-
-	s := string(b)
 
 	// TODO
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.24.3:src/encoding/json/encode.go
-	num, err := strconv.ParseFloat(s, 64)
+	num, err := strconv.ParseFloat(string(b), 64)
 	if err == nil {
-		return []byte(fmt.Sprintf("%g", num))
+		out.WriteString(fmt.Sprintf("%g", num))
+		return
 	}
 
 	// TODO - overflow
-	return b
+	out.Write(b)
+	return
 }
 
-func bareword(b []byte) []byte {
+func bareword(out *bytes.Buffer, b []byte) {
 	if isNull(b) || isTrue(b) || isFalse(b) {
-		return b
+		out.Write(b)
+		return
 	}
 
 	if bytes.Equal(bareInfinity, b) || (b[0] == '+' && bytes.Equal(bareInfinity, b[1:])) {
-		return maxSafeInteger
+		out.Write(maxSafeInteger)
+		return
 	}
 	if b[0] == '-' && bytes.Equal(bareInfinity, b[1:]) {
-		return minSafeInteger
+		out.Write(minSafeInteger)
+		return
 	}
 
 	// TODO Nan
 
 	// something else
-	return b
+	out.Write(b)
+	return
 }
 
 // writeString takes an "quoted string with escapes" and converts to a JSON-spec string.
@@ -490,12 +495,6 @@ func writeString(out *bytes.Buffer, src []byte) {
 	out.Write(buf)
 	return
 }
-
-var objectStart = []byte{'{'}
-var objectEnd = []byte{'}'}
-
-var arrayStart = []byte{'['}
-var arrayEnd = []byte{']'}
 
 func writeQuoted(out *bytes.Buffer, src []byte) {
 	/*
