@@ -771,30 +771,8 @@ func writeHex(b []byte) []byte {
 	return b
 }
 
-func isFloat(b []byte) bool {
-
-	if b[0] == '+' {
-		return false
-	}
-	if b[0] == '-' {
-		b = b[1:]
-	}
-
-	// non-standard
-	if b[0] == '.' {
-		return false
-	}
-
-	if b[0] == '0' && len(b) > 1 && b[1] != '.' {
-		return false
-	}
-
-	// [-]#
-	return true
-
-}
 func writeFloat(b []byte) []byte {
-	if isFloat(b) {
+	if isValidNumber(b) {
 		return b
 	}
 

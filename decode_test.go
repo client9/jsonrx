@@ -141,6 +141,10 @@ func TestDecodeNumbers(t *testing.T) {
 			"0.5",
 		},
 		{
+			"5.",
+			"5",
+		},
+		{
 			"0xFF",
 			"255",
 		},
