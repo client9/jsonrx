@@ -10,6 +10,8 @@ func Decode(src []byte) ([]byte, error) {
 }
 
 func DecodeAppend(dst *bytes.Buffer, src []byte) error {
-	tx := newJsonRx(src)
-	return tx.Translate(dst)
+	d := decoder{
+		out: dst,
+	}
+	return d.Translate(src)
 }

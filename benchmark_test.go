@@ -17,7 +17,7 @@ func BenchmarkDecodeTokens(b *testing.B) {
 	}
 
 	for b.Loop() {
-		rx := newJsonRx(data)
+		rx := newTokenizer(data)
 		for {
 			_, err := rx.Next()
 			if err == io.EOF {
