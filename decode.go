@@ -36,7 +36,7 @@ func (d *decoder) Translate(src []byte) error {
 			if len(d.stack) == 0 {
 				return nil
 			}
-			return fmt.Errorf("Got EOF midway")
+			return fmt.Errorf("got end of file prematurely")
 		}
 		if err != nil {
 			return err
@@ -76,7 +76,7 @@ func stateValue(d *decoder, t token) error {
 		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
 	default:
-		return fmt.Errorf("Unknown token for value")
+		return fmt.Errorf("unknown token for value")
 	}
 	return nil
 }
@@ -110,7 +110,7 @@ func stateObjectKey(d *decoder, t token) error {
 		writeQuoted(d.out, t.value)
 		d.next = stateObjectAfterKey
 	default:
-		return fmt.Errorf("Invalid token at Object key :%s", t)
+		return fmt.Errorf("invalid token at object key :%s", t)
 	}
 	return nil
 }
@@ -122,7 +122,7 @@ func stateObjectAfterKey(d *decoder, t token) error {
 		return nil
 	}
 
-	return fmt.Errorf("Invalid token after Object Key")
+	return fmt.Errorf("invalid token after object key")
 }
 
 func stateObjectValue(d *decoder, t token) error {
@@ -147,7 +147,7 @@ func stateObjectValue(d *decoder, t token) error {
 	case '[':
 		return stateArrayStart(d, t)
 	default:
-		return fmt.Errorf("Unknown token for object value - %s", t)
+		return fmt.Errorf("unknown token for object value - %s", t)
 	}
 	return nil
 }
@@ -163,7 +163,7 @@ func stateObjectAfterValue(d *decoder, t token) error {
 		d.out.WriteByte(',')
 		return stateObjectKey(d, t)
 	default:
-		return fmt.Errorf("Unknown token after object value - %s", t)
+		return fmt.Errorf("unknown token after object value - %s", t)
 	}
 }
 
@@ -200,7 +200,7 @@ func stateComma(d *decoder, t token) error {
 
 func stateObjectEnd(d *decoder, t token) error {
 	if len(d.stack) == 0 || d.stack[len(d.stack)-1] != '{' {
-		return fmt.Errorf("Unmatched object end, level=%d, stack=%q", len(d.stack), string(d.stack))
+		return fmt.Errorf("unmatched object end, level=%d, stack=%q", len(d.stack), string(d.stack))
 	}
 	d.out.WriteByte('}')
 	d.stack = d.stack[:len(d.stack)-1]
@@ -255,7 +255,7 @@ func stateArrayAfterStart(d *decoder, t token) error {
 
 func stateArrayEnd(d *decoder, t token) error {
 	if len(d.stack) == 0 || d.stack[len(d.stack)-1] != '[' {
-		return fmt.Errorf("Unmatched array end")
+		return fmt.Errorf("unmatched array end")
 	}
 	d.out.WriteByte(']')
 	d.stack = d.stack[:len(d.stack)-1]
@@ -285,7 +285,7 @@ func stateArrayValue(d *decoder, t token) error {
 	case '[':
 		return stateArrayStart(d, t)
 	default:
-		return fmt.Errorf("Unknown token for array value - %s", t)
+		return fmt.Errorf("unknown token for array value - %s", t)
 	}
 	return nil
 }
@@ -304,7 +304,7 @@ func stateArrayAfterValue(d *decoder, t token) error {
 		d.out.WriteByte(',')
 		return stateArrayValue(d, t)
 	}
-	return fmt.Errorf("Unknown token after array value - %s", t)
+	return fmt.Errorf("unknown token after array value - %s", t)
 }
 
 func isNull(b []byte) bool {
@@ -407,7 +407,6 @@ func writeHex(out *bytes.Buffer, b []byte) {
 	}
 	// TODO - Overflow
 	bareword(out, b)
-	return
 }
 
 func writeFloat(out *bytes.Buffer, b []byte) {
@@ -420,13 +419,12 @@ func writeFloat(out *bytes.Buffer, b []byte) {
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.24.3:src/encoding/json/encode.go
 	num, err := strconv.ParseFloat(string(b), 64)
 	if err == nil {
-		out.WriteString(fmt.Sprintf("%g", num))
+		out.WriteString(strconv.FormatFloat(num, 'g', -1, 64))
 		return
 	}
 
 	// TODO - overflow
 	out.Write(b)
-	return
 }
 
 func bareword(out *bytes.Buffer, b []byte) {
@@ -448,7 +446,6 @@ func bareword(out *bytes.Buffer, b []byte) {
 
 	// something else
 	out.Write(b)
-	return
 }
 
 // writeString takes an "quoted string with escapes" and converts to a JSON-spec string.
@@ -493,7 +490,6 @@ func writeString(out *bytes.Buffer, src []byte) {
 	buf := out.AvailableBuffer()
 	buf = appendRecodeString(buf, src)
 	out.Write(buf)
-	return
 }
 
 func writeQuoted(out *bytes.Buffer, src []byte) {

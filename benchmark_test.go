@@ -83,6 +83,14 @@ func BenchmarkFloatFast(b *testing.B) {
 		writeFloat(out, data)
 	}
 }
+func BenchmarkFloatSlow(b *testing.B) {
+	data := []byte("+1.23456789")
+	out := &bytes.Buffer{}
+	for b.Loop() {
+		out.Reset()
+		writeFloat(out, data)
+	}
+}
 func BenchmarkHex(b *testing.B) {
 	data := []byte("0xDEADbeef")
 	out := &bytes.Buffer{}
