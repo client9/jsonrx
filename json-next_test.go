@@ -90,9 +90,9 @@ func TestJsonNext(t *testing.T) {
 				t.Errorf("Unable to decode valid JSON %v", err)
 			}
 			data = bytes.TrimSpace(data)
-			data2 = bytes.TrimSpace(data)
+			data2 = bytes.TrimSpace(data2)
 			if !bytes.Equal(data, data2) {
-				t.Errorf("NO MATCH\n%s\n---%s\n", string(data), string(data2))
+				t.Errorf("NO MATCH\n%s\n---\n%s\n", string(data), string(data2))
 			}
 		})
 	}
