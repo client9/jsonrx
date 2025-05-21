@@ -19,8 +19,8 @@ var minSafeInteger = []byte("-9007199254740992")
 
 type decoder struct {
 	tok   *tokenizer
-	stack []byte
 	out   *bytes.Buffer
+	stack []byte
 	next  stateFunction
 }
 
@@ -52,7 +52,6 @@ func (d *decoder) Translate(src []byte) error {
 			return err
 		}
 	}
-	return nil
 }
 
 func stateValue(d *decoder, t token) error {
@@ -106,12 +105,10 @@ func stateObjectKey(d *decoder, t token) error {
 	case 's':
 		writeString(d.out, t.value)
 		d.next = stateObjectAfterKey
-		return nil
 	case 'w', '0', '1', '2':
 		// whatever it is, it's always quoted
-		writeQuoted(t.value, d.out)
+		writeQuoted(d.out, t.value)
 		d.next = stateObjectAfterKey
-		return nil
 	default:
 		return fmt.Errorf("Invalid token at Object key :%s", t)
 	}
@@ -339,6 +336,8 @@ func isFalse(b []byte) bool {
 		b[4] == 'e'
 }
 
+var zeroCharArray = []byte{'0'}
+
 func writeInt(b0 []byte) []byte {
 
 	// asset -- should never happen
@@ -389,7 +388,7 @@ func writeInt(b0 []byte) []byte {
 	}
 	if len(b) == 0 {
 		// "+00000" or "0000"
-		return []byte{'0'}
+		return zeroCharArray
 	}
 
 	return b
@@ -482,7 +481,7 @@ func writeString(out *bytes.Buffer, src []byte) {
 		// TBD: ERROR -- \` needs to be unescaped.
 		//
 		// no need to unescape first -- directly encode
-		writeQuoted(src, out)
+		writeQuoted(out, src)
 		return
 	}
 
@@ -492,15 +491,13 @@ func writeString(out *bytes.Buffer, src []byte) {
 	return
 }
 
-var zeroCharArray = []byte{'0'}
-
 var objectStart = []byte{'{'}
 var objectEnd = []byte{'}'}
 
 var arrayStart = []byte{'['}
 var arrayEnd = []byte{']'}
 
-func writeQuoted(src []byte, out *bytes.Buffer) {
+func writeQuoted(out *bytes.Buffer, src []byte) {
 	/*
 		hasEscape := false
 		for _, b := range src {

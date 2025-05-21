@@ -95,17 +95,17 @@ func BenchmarkString(b *testing.B) {
 }
 func BenchmarkQuotedFast(b *testing.B) {
 	data := []byte("abcdefgh1234567890")
-	out := bytes.Buffer{}
+	out := &bytes.Buffer{}
 	for b.Loop() {
 		out.Reset()
-		writeQuoted(data, &out)
+		writeQuoted(out, data)
 	}
 }
 func BenchmarkQuotedSlow(b *testing.B) {
 	data := []byte("abcdefgh\\n1234567890")
-	out := bytes.Buffer{}
+	out := &bytes.Buffer{}
 	for b.Loop() {
 		out.Reset()
-		writeQuoted(data, &out)
+		writeQuoted(out, data)
 	}
 }
