@@ -22,6 +22,16 @@ const newline = '\n'
 const slash = '/'
 const aster = '*'
 
+// from Javascript
+//
+//	Number.MaxSafeInteger
+//	Number.MinSafeInteger
+//
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MIN_SAFE_INTEGER
+var bareInfinity = []byte("Infinity")
+var maxSafeInteger = []byte("9007199254740991")
+var minSafeInteger = []byte("-9007199254740992")
+
 type token struct {
 	kind  byte
 	value []byte
@@ -65,7 +75,7 @@ func (tx *jsonRx) Next() (token, error) {
 			tx.col += 1
 			tx.data = tx.data[1:]
 			return t, nil
-		case ' ', '\t':
+		case ' ', '\t', '\r':
 			tx.col += 1
 			continue
 		case newline:
@@ -223,7 +233,7 @@ func (tx *jsonRx) hexnumber() (token, error) {
 	for i, b := range tx.data[2:] {
 		switch b {
 
-		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n':
+		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n', '\r':
 
 			t := token{
 				kind:  kind,
@@ -264,7 +274,7 @@ func (tx *jsonRx) number() (token, error) {
 	for i, b := range tx.data {
 		switch b {
 
-		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n':
+		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n', '\r':
 			t := token{
 				kind:  kind,
 				value: tx.data[:i],
@@ -330,10 +340,11 @@ func isFalse(b []byte) bool {
 		b[3] == 's' &&
 		b[4] == 'e'
 }
+
 func (tx *jsonRx) bareword() (token, error) {
 	for i, b := range tx.data {
 		switch b {
-		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n':
+		case leftBrace, rightBrace, leftBracket, rightBracket, colon, comma, ' ', '\t', '\n', '\r':
 			t := token{
 				kind:  'w',
 				value: tx.data[0:i],
@@ -794,8 +805,14 @@ func bareword(b []byte) []byte {
 		return b
 	}
 
+	if bytes.Equal(bareInfinity, b) || (b[0] == '+' && bytes.Equal(bareInfinity, b[1:])) {
+		return maxSafeInteger
+	}
+	if b[0] == '-' && bytes.Equal(bareInfinity, b[1:]) {
+		return minSafeInteger
+	}
+
 	// TODO Nan
-	// TODO Infinity
 
 	// something else
 	return b

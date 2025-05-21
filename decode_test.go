@@ -148,6 +148,18 @@ func TestDecodeNumbers(t *testing.T) {
 			"0xFF",
 			"255",
 		},
+		{
+			"Infinity",
+			"9007199254740991",
+		},
+		{
+			"+Infinity",
+			"9007199254740991",
+		},
+		{
+			"-Infinity",
+			"-9007199254740992",
+		},
 	}
 
 	for _, tt := range cases {

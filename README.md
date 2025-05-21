@@ -21,11 +21,12 @@ The public API of `Decode` and `DecodeAppend` are stable and works.
 - [x] Remove shell-style # single line comments
 - [x] Remove '+' sign from integers (JSON5)
 - [x] Remove leading zeros from numbers, e.g. "01"
-- [x] Normalize floats ".5" to "0.5"
-- [ ] Convert NaN forms  ... (coming soon)
-- [ ] Convert Infinity forms to ... (coming soon)
+- [x] Normalize floats ".5" to "0.5", "5." to "5"
+- [x] Convert [+/-]Infinity [+/-]2^53 -1 (largest/smallest possible integer)
 - [x] Normalize string escape sequences (mostly done)
+- [ ] Convert NaN forms  ... (coming soon)
 - [ ] Convert \x?? hex escapes
+- [ ] Convert "\r\n" to "\n"
 
 ## Supported JSON Variants
 
