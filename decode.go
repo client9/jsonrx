@@ -215,7 +215,7 @@ func (tx *jsonRx) commentSingle() (token, error) {
 		col:   tx.col,
 	}
 	for i, b := range tx.data {
-		if b == newline {
+		if b == newline || b == '\r' {
 			t.value = tx.data[:i]
 			tx.data = tx.data[i:]
 			return t, nil
@@ -552,6 +552,11 @@ func (rx *jsonRx) stateObjectAfterValue(t token, out *bytes.Buffer) (State, erro
 		return rx.stateObjectEnd(t, out)
 	case ',':
 		return rx.stateComma(t, out)
+		// MIDDLE COMMA
+	case 'w', 's', '0', '1', '2':
+		// e.g. { "key": 1 "key2": 2 }  ==> { "key": 1, "key2": 2 }
+		out.WriteByte(',')
+		return rx.stateObjectKey(t, out)
 	}
 	return StateZero, fmt.Errorf("Unknown token after object value - %s", t)
 }
@@ -598,14 +603,25 @@ func (rx *jsonRx) stateObjectEnd(t token, out *bytes.Buffer) (State, error) {
 func (rx *jsonRx) stateAfterContainer(t token, out *bytes.Buffer) (State, error) {
 
 	switch t.kind {
-	case '}':
+	case rightBrace:
 		return rx.stateObjectEnd(t, out)
-	case ']':
+	case rightBracket:
 		return rx.stateArrayEnd(t, out)
 	case ',':
 		return rx.stateComma(t, out)
+
+	// MIDDLE COMMA
+	case leftBrace, leftBracket, 'w', 's', '0', '1', '2':
+		out.WriteByte(',')
+		if rx.stack[len(rx.stack)-1] == leftBrace {
+			// write comma, and expect a key
+			return rx.stateObjectKey(t, out)
+		} else {
+			// it's an array value
+			return rx.stateArrayValue(t, out)
+		}
 	}
-	return StateZero, fmt.Errorf("unknown token after end of array or object")
+	return StateZero, fmt.Errorf("unknown token after end of object or array - %s", t)
 }
 func (rx *jsonRx) stateArrayStart(t token, out *bytes.Buffer) (State, error) {
 	out.WriteByte('[')
@@ -663,6 +679,13 @@ func (rx *jsonRx) stateArrayAfterValue(t token, out *bytes.Buffer) (State, error
 		return rx.stateArrayEnd(t, out)
 	case ',':
 		return rx.stateComma(t, out)
+
+		// MIDDLE COMMA
+	case leftBrace, leftBracket, 'w', 's', '0', '1', '2':
+		// e.g. [ 1 2 3 ] ==> [ 1,2,3 ]
+		//      [ "foo" "bar" ] ==> [ "foo", "bar" ]
+		out.WriteByte(',')
+		return rx.stateArrayValue(t, out)
 	}
 	return StateZero, fmt.Errorf("Unknown token after array value - %s", t)
 }
