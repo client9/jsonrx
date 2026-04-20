@@ -46,28 +46,7 @@ func writeScalar(s string, buf *bytes.Buffer) error {
 
 // writeJSONString writes s as a properly escaped JSON string.
 func writeJSONString(s string, buf *bytes.Buffer) {
-	buf.WriteByte('"')
-	for _, r := range s {
-		switch r {
-		case '"':
-			buf.WriteString(`\"`)
-		case '\\':
-			buf.WriteString(`\\`)
-		case '\n':
-			buf.WriteString(`\n`)
-		case '\r':
-			buf.WriteString(`\r`)
-		case '\t':
-			buf.WriteString(`\t`)
-		default:
-			if r < 0x20 {
-				fmt.Fprintf(buf, `\u%04x`, r)
-			} else {
-				buf.WriteRune(r)
-			}
-		}
-	}
-	buf.WriteByte('"')
+	buf.Write(appendString(nil, []byte(s)))
 }
 
 // --------------------------------------------------------------------------
