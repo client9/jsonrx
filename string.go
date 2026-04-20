@@ -121,6 +121,18 @@ var safeSet = [utf8.RuneSelf]bool{
 
 const hex = "0123456789abcdef"
 
+func hexVal(b byte) int {
+	switch {
+	case '0' <= b && b <= '9':
+		return int(b - '0')
+	case 'a' <= b && b <= 'f':
+		return int(b-'a') + 10
+	case 'A' <= b && b <= 'F':
+		return int(b-'A') + 10
+	}
+	return -1
+}
+
 func appendString(dst []byte, src []byte) []byte {
 	dst = append(dst, '"')
 	start := 0
@@ -258,6 +270,13 @@ func appendRecodeString(dst []byte, src []byte) []byte {
 				case 'v':
 					b = '\v'
 					i++
+				case 'x': // \xNN hex escape → byte 0xNN
+					if i+3 < len(src) {
+						if v1, v2 := hexVal(src[i+2]), hexVal(src[i+3]); v1 >= 0 && v2 >= 0 {
+							b = byte(v1<<4 | v2)
+							i += 3
+						}
+					}
 
 				// Nonstandard
 				case '\n': // [backslash] [newline] -- line continuation
@@ -291,12 +310,11 @@ func appendRecodeString(dst []byte, src []byte) []byte {
 			case '\t':
 				dst = append(dst, '\\', 't')
 			default:
-				// This encodes bytes < 0x20 except for \b, \f, \n, \r and \t.
-				// If escapeHTML is set, it also escapes <, >, and &
-				// because they can lead to security holes when
-				// user-controlled strings are rendered into JSON
-				// and served to some browsers.
-				dst = append(dst, '\\', 'u', '0', '0', hex[b>>4], hex[b&0xF])
+				if b < utf8.RuneSelf && safeSet[b] {
+					dst = append(dst, b)
+				} else {
+					dst = append(dst, '\\', 'u', '0', '0', hex[b>>4], hex[b&0xF])
+				}
 			}
 			i++
 			start = i

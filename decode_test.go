@@ -160,6 +160,8 @@ func TestDecodeNumbers(t *testing.T) {
 			"-Infinity",
 			"-9007199254740992",
 		},
+		// large integer overflow → falls through to writeFloat
+		{"+99999999999999999", "1e+17"},
 	}
 
 	for _, tt := range cases {
@@ -200,6 +202,59 @@ func TestDecodeStrings(t *testing.T) {
 		got := string(out)
 		if tt.out != got {
 			t.Errorf("Expected %s got %s", tt.out, got)
+		}
+	}
+}
+
+func TestDecodeArrayValueTypes(t *testing.T) {
+	cases := []testcase{
+		{"[1.5]", "[1.5]"},
+		{"[0xFF]", "[255]"},
+		{"[[1,2]]", "[[1,2]]"},
+		{`[{"x":1}]`, `[{"x":1}]`},
+		{"[1.5,0xFF,[1],{}]", "[1.5,255,[1],{}]"},
+	}
+	for _, tt := range cases {
+		out, err := Decode([]byte(tt.in))
+		if err != nil {
+			t.Errorf("Decode(%q): unexpected error: %v", tt.in, err)
+		}
+		got := string(out)
+		if tt.out != got {
+			t.Errorf("Decode(%q): expected %q, got %q", tt.in, tt.out, got)
+		}
+	}
+}
+
+func TestDecodeImplicitComma(t *testing.T) {
+	cases := []testcase{
+		{`{"a":1 "b":2}`, `{"a":1,"b":2}`}, // adjacent object entries
+		{"[1 2 3]", "[1,2,3]"},             // adjacent array values
+		{"[[1][2]]", "[[1],[2]]"},          // adjacent containers in array
+	}
+	for _, tt := range cases {
+		out, err := Decode([]byte(tt.in))
+		if err != nil {
+			t.Errorf("Decode(%q): unexpected error: %v", tt.in, err)
+		}
+		got := string(out)
+		if tt.out != got {
+			t.Errorf("Decode(%q): expected %q, got %q", tt.in, tt.out, got)
+		}
+	}
+}
+
+func TestDecodeErrors(t *testing.T) {
+	cases := []string{
+		"[}",    // array closed with object brace
+		"{]",    // object closed with array bracket
+		`{"a"}`, // object key without colon
+		"[:]",   // colon in array value position
+	}
+	for _, in := range cases {
+		_, err := Decode([]byte(in))
+		if err == nil {
+			t.Errorf("Decode(%q): expected error, got nil", in)
 		}
 	}
 }
