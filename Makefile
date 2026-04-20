@@ -4,6 +4,9 @@ test:
 bench:
 	go test -benchmem -bench .
 
+.PHONY: benchmarks
+benchmarks:
+	cd benchmarks && $(MAKE)
 cover:
 	rm -f cover.out
 	go test -run='^Test' -coverprofile=cover.out -coverpkg=.
