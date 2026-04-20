@@ -22,7 +22,7 @@ func writeScalar(s string, buf *bytes.Buffer) error {
 	}
 
 	if len(s) > 0 && s[0] == '"' {
-		str, err := parseDoubleQuoted(s)
+		str, _, err := parseDoubleQuoted(s)
 		if err != nil {
 			return err
 		}
@@ -71,16 +71,18 @@ func parseUnicodeEscape(hex4 string) (rune, error) {
 	return r, nil
 }
 
-func parseDoubleQuoted(s string) (string, error) {
+// parseDoubleQuoted parses a double-quoted YAML string starting at s[0].
+// Returns the unescaped content, the index after the closing '"', and any error.
+func parseDoubleQuoted(s string) (string, int, error) {
 	if len(s) < 2 || s[0] != '"' {
-		return s, nil
+		return s, len(s), nil
 	}
 	var b strings.Builder
 	i := 1
 	for i < len(s) {
 		c := s[i]
 		if c == '"' {
-			return b.String(), nil
+			return b.String(), i + 1, nil
 		}
 		if c == '\\' && i+1 < len(s) {
 			i++
@@ -127,28 +129,12 @@ func parseDoubleQuoted(s string) (string, error) {
 		}
 		i++
 	}
-	return b.String(), fmt.Errorf("unterminated double-quoted string")
+	return b.String(), i, fmt.Errorf("unterminated double-quoted string")
 }
 
 func parseSingleQuoted(s string) string {
-	if len(s) < 2 || s[0] != '\'' {
-		return s
-	}
-	var b strings.Builder
-	i := 1
-	for i < len(s) {
-		if s[i] == '\'' {
-			if i+1 < len(s) && s[i+1] == '\'' {
-				b.WriteByte('\'')
-				i += 2
-				continue
-			}
-			break
-		}
-		b.WriteByte(s[i])
-		i++
-	}
-	return b.String()
+	str, _ := parseSingleQuotedRaw(s)
+	return str
 }
 
 // --------------------------------------------------------------------------
@@ -225,21 +211,8 @@ func splitMapKey(content string) (key, value string) {
 
 // parseDoubleQuotedRaw returns (unescaped string, remainder after closing quote).
 func parseDoubleQuotedRaw(s string) (string, string) {
-	str, err := parseDoubleQuoted(s)
-	if err != nil {
-		return str, ""
-	}
-	i := 1
-	for i < len(s) {
-		if s[i] == '"' {
-			return str, s[i+1:]
-		}
-		if s[i] == '\\' {
-			i++
-		}
-		i++
-	}
-	return str, ""
+	str, end, _ := parseDoubleQuoted(s)
+	return str, s[end:]
 }
 
 // parseSingleQuotedRaw returns (string, remainder after closing quote).

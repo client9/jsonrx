@@ -224,35 +224,14 @@ func flowParseKey(s string, pos int) (string, int, error) {
 
 // flowParseDoubleQuoted reads a double-quoted string starting at s[pos].
 func flowParseDoubleQuoted(s string, pos int) (string, int, error) {
-	end := pos + 1
-	for end < len(s) {
-		if s[end] == '\\' {
-			end += 2
-			continue
-		}
-		if s[end] == '"' {
-			str, err := parseDoubleQuoted(s[pos : end+1])
-			return str, end + 1, err
-		}
-		end++
-	}
-	return "", end, fmt.Errorf("unterminated double-quoted string")
+	str, end, err := parseDoubleQuoted(s[pos:])
+	return str, pos + end, err
 }
 
 // flowParseSingleQuoted reads a single-quoted string starting at s[pos].
 func flowParseSingleQuoted(s string, pos int) (string, int) {
-	end := pos + 1
-	for end < len(s) {
-		if s[end] == '\'' {
-			if end+1 < len(s) && s[end+1] == '\'' {
-				end += 2
-				continue
-			}
-			return parseSingleQuoted(s[pos : end+1]), end + 1
-		}
-		end++
-	}
-	return parseSingleQuoted(s[pos:]), end
+	str, rest := parseSingleQuotedRaw(s[pos:])
+	return str, len(s) - len(rest)
 }
 
 // flowSkipWS advances pos past spaces, tabs, and newlines.
