@@ -63,7 +63,7 @@ func TestJson5Json(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: unable to read: %v", src, err)
 			}
-			data, err := Decode(src)
+			data, err := FromJSON5(src)
 			if err != nil {
 				t.Errorf("%s: Got unexpected error: %v", src, err)
 			}
