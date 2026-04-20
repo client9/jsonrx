@@ -1,4 +1,4 @@
-package jsonrx
+package tojson
 
 import "testing"
 
