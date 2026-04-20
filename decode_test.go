@@ -258,3 +258,19 @@ func TestDecodeErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeNaN(t *testing.T) {
+	cases := []string{
+		"NaN",
+		"+NaN",
+		"-NaN",
+		`{"x":NaN}`,
+		`[1,NaN,2]`,
+	}
+	for _, in := range cases {
+		_, err := Decode([]byte(in))
+		if err == nil {
+			t.Errorf("Decode(%q): expected error for NaN, got nil", in)
+		}
+	}
+}

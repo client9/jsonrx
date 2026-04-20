@@ -14,8 +14,19 @@ import (
 //	Number.MaxSafeInteger
 //	Number.MinSafeInteger
 var bareInfinity = []byte("Infinity")
+var bareNaN = []byte("NaN")
 var maxSafeInteger = []byte("9007199254740991")
 var minSafeInteger = []byte("-9007199254740992")
+
+func isNaN(b []byte) bool {
+	if len(b) == 3 {
+		return bytes.Equal(b, bareNaN)
+	}
+	if len(b) == 4 && (b[0] == '+' || b[0] == '-') {
+		return bytes.Equal(b[1:], bareNaN)
+	}
+	return false
+}
 
 type decoder struct {
 	tok   *tokenizer
@@ -73,6 +84,9 @@ func stateValue(d *decoder, t token) error {
 		writeHex(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case 'w':
+		if isNaN(t.value) {
+			return fmt.Errorf("NaN is not valid JSON")
+		}
 		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
 	default:
@@ -131,6 +145,9 @@ func stateObjectValue(d *decoder, t token) error {
 		writeString(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case 'w':
+		if isNaN(t.value) {
+			return fmt.Errorf("NaN is not valid JSON")
+		}
 		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '0':
@@ -269,6 +286,9 @@ func stateArrayValue(d *decoder, t token) error {
 		writeString(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case 'w':
+		if isNaN(t.value) {
+			return fmt.Errorf("NaN is not valid JSON")
+		}
 		bareword(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case '0':
