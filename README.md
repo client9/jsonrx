@@ -24,9 +24,9 @@ The public API of `Decode` and `DecodeAppend` are stable and works.
 - [x] Normalize floats ".5" to "0.5", "5." to "5"
 - [x] Convert [+/-]Infinity [+/-]2^53 -1 (largest/smallest possible integer)
 - [x] Normalize string escape sequences (mostly done)
+- [x] Convert "\r\n" to "\n"
 - [ ] Convert NaN forms  ... (coming soon)
 - [ ] Convert \x?? hex escapes
-- [ ] Convert "\r\n" to "\n"
 
 ## Supported JSON Variants
 

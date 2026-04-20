@@ -141,6 +141,10 @@ func appendString(dst []byte, src []byte) []byte {
 			case '\n':
 				dst = append(dst, '\\', 'n')
 			case '\r':
+				// \r\n -> \n: skip the \r, let \n be processed next
+				if i+1 < len(src) && src[i+1] == '\n' {
+					break
+				}
 				dst = append(dst, '\\', 'r')
 			case '\t':
 				dst = append(dst, '\\', 't')
@@ -279,6 +283,10 @@ func appendRecodeString(dst []byte, src []byte) []byte {
 			case '\n':
 				dst = append(dst, '\\', 'n')
 			case '\r':
+				// \r\n -> \n: skip the \r, let \n be processed next
+				if i+1 < len(src) && src[i+1] == '\n' {
+					break
+				}
 				dst = append(dst, '\\', 'r')
 			case '\t':
 				dst = append(dst, '\\', 't')
