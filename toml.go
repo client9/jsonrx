@@ -607,7 +607,7 @@ func tomlConvertStreaming(input string) ([]byte, error) {
 		if strings.HasPrefix(trimmed, "[[") {
 			closeInlineTo(0)
 			if !strings.HasSuffix(trimmed, "]]") {
-				return nil, fmt.Errorf("malformed array-of-tables header: %s", trimmed)
+				return nil, atLine(lineIdx-1, fmt.Errorf("malformed array-of-tables header: %s", trimmed))
 			}
 			path, rest, err := parseTOMLKeyPath(trimmed[2 : len(trimmed)-2])
 			if err != nil {
@@ -625,7 +625,7 @@ func tomlConvertStreaming(input string) ([]byte, error) {
 		} else if trimmed[0] == '[' {
 			closeInlineTo(0)
 			if !strings.HasSuffix(trimmed, "]") {
-				return nil, fmt.Errorf("malformed table header: %s", trimmed)
+				return nil, atLine(lineIdx-1, fmt.Errorf("malformed table header: %s", trimmed))
 			}
 			path, rest, err := parseTOMLKeyPath(trimmed[1 : len(trimmed)-1])
 			if err != nil {

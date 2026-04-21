@@ -11,31 +11,8 @@ package tojson
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 )
-
-// ParseError is returned by FromYAML when the input cannot be parsed.
-type ParseError struct {
-	Line int    // 1-based line number in the original input
-	Msg  string // description of the problem
-}
-
-func (e *ParseError) Error() string {
-	return fmt.Sprintf("line %d: %s", e.Line, e.Msg)
-}
-
-// atLine wraps err with a 1-based line number unless it is already a ParseError.
-// rawLine is a 0-based index into the original rawLines slice.
-func atLine(rawLine int, err error) error {
-	if err == nil {
-		return nil
-	}
-	if _, ok := err.(*ParseError); ok {
-		return err
-	}
-	return &ParseError{Line: rawLine + 1, Msg: err.Error()}
-}
 
 func yamlConvert(input string) ([]byte, error) {
 	p := newParser(input)

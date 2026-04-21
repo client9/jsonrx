@@ -300,3 +300,36 @@ func TestDecodeNaN(t *testing.T) {
 		}
 	}
 }
+
+func TestJSON5ParseError(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		line  int
+	}{
+		// unterminated string: error at the line the string started
+		{"unterminated string line 1", `"unclosed`, 1},
+		{"unterminated string line 3", "{\n  \"k\": \"v\",\n  \"bad\": \"unclosed\n}", 3},
+		// unescaped newline in double-quoted string: error at the offending line
+		{"unescaped newline line 2", "{\n  \"bad\": \"has\nnewline\"}", 2},
+		// NaN: error at the line containing NaN
+		{"NaN line 2", "[\n  NaN\n]", 2},
+		// hex overflow: error at the line containing the literal
+		{"hex overflow line 2", "[\n  0x10000000000000000\n]", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := FromJSON5([]byte(tc.input))
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T: %v", err, err)
+			}
+			if pe.Line != tc.line {
+				t.Errorf("expected line %d, got %d (msg: %s)", tc.line, pe.Line, pe.Msg)
+			}
+		})
+	}
+}

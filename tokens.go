@@ -118,7 +118,7 @@ func (tx *tokenizer) string() (token, error) {
 			}
 
 			if !skip {
-				return token{}, fmt.Errorf("unescaped newline in string")
+				return token{}, &ParseError{Line: tx.row + 1, Msg: "unescaped newline in string"}
 			}
 			skip = false
 			tx.row += 1
@@ -131,7 +131,7 @@ func (tx *tokenizer) string() (token, error) {
 		}
 	}
 	// always an error
-	return token{}, fmt.Errorf("quoted string fell off edge")
+	return token{}, &ParseError{Line: tx.row + 1, Msg: "quoted string fell off edge"}
 }
 
 func (tx *tokenizer) comment() (token, error) {

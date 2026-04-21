@@ -29,10 +29,11 @@ func isNaN(b []byte) bool {
 }
 
 type decoder struct {
-	tok   *tokenizer
-	out   *bytes.Buffer
-	stack []byte
-	next  stateFunction
+	tok     *tokenizer
+	out     *bytes.Buffer
+	stack   []byte
+	next    stateFunction
+	lastRow int
 }
 
 type stateFunction func(d *decoder, t token) error
@@ -47,7 +48,7 @@ func (d *decoder) Translate(src []byte) error {
 			if len(d.stack) == 0 {
 				return nil
 			}
-			return fmt.Errorf("got end of file prematurely")
+			return &ParseError{Line: d.lastRow + 1, Msg: "got end of file prematurely"}
 		}
 		if err != nil {
 			return err
@@ -57,6 +58,7 @@ func (d *decoder) Translate(src []byte) error {
 		if t.kind == 'c' {
 			continue
 		}
+		d.lastRow = t.row
 		err = d.next(d, t)
 
 		if err != nil {
@@ -76,27 +78,27 @@ func stateValue(d *decoder, t token) error {
 		d.next = stateObjectAfterValue
 	case '0':
 		if err := writeInt(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateObjectAfterValue
 	case '1':
 		if err := writeFloat(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateObjectAfterValue
 	case '2':
 		if err := writeHex(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateObjectAfterValue
 	case 'w':
 		if isNaN(t.value) {
-			return fmt.Errorf("NaN is not valid JSON")
+			return atToken(t, fmt.Errorf("NaN is not valid JSON"))
 		}
 		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
 	default:
-		return fmt.Errorf("unknown token for value")
+		return atToken(t, fmt.Errorf("unknown token for value"))
 	}
 	return nil
 }
@@ -130,7 +132,7 @@ func stateObjectKey(d *decoder, t token) error {
 		writeQuoted(d.out, t.value)
 		d.next = stateObjectAfterKey
 	default:
-		return fmt.Errorf("invalid token at object key :%s", t)
+		return atToken(t, fmt.Errorf("invalid token at object key: %s", t))
 	}
 	return nil
 }
@@ -142,7 +144,7 @@ func stateObjectAfterKey(d *decoder, t token) error {
 		return nil
 	}
 
-	return fmt.Errorf("invalid token after object key")
+	return atToken(t, fmt.Errorf("invalid token after object key"))
 }
 
 func stateObjectValue(d *decoder, t token) error {
@@ -152,23 +154,23 @@ func stateObjectValue(d *decoder, t token) error {
 		d.next = stateObjectAfterValue
 	case 'w':
 		if isNaN(t.value) {
-			return fmt.Errorf("NaN is not valid JSON")
+			return atToken(t, fmt.Errorf("NaN is not valid JSON"))
 		}
 		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '0':
 		if err := writeInt(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateObjectAfterValue
 	case '1':
 		if err := writeFloat(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateObjectAfterValue
 	case '2':
 		if err := writeHex(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateObjectAfterValue
 	case '{':
@@ -176,7 +178,7 @@ func stateObjectValue(d *decoder, t token) error {
 	case '[':
 		return stateArrayStart(d, t)
 	default:
-		return fmt.Errorf("unknown token for object value - %s", t)
+		return atToken(t, fmt.Errorf("unknown token for object value: %s", t))
 	}
 	return nil
 }
@@ -192,7 +194,7 @@ func stateObjectAfterValue(d *decoder, t token) error {
 		d.out.WriteByte(',')
 		return stateObjectKey(d, t)
 	default:
-		return fmt.Errorf("unknown token after object value - %s", t)
+		return atToken(t, fmt.Errorf("unknown token after object value: %s", t))
 	}
 }
 
@@ -229,7 +231,7 @@ func stateComma(d *decoder, t token) error {
 
 func stateObjectEnd(d *decoder, t token) error {
 	if len(d.stack) == 0 || d.stack[len(d.stack)-1] != '{' {
-		return fmt.Errorf("unmatched object end, level=%d, stack=%q", len(d.stack), string(d.stack))
+		return atToken(t, fmt.Errorf("unmatched object end, level=%d, stack=%q", len(d.stack), string(d.stack)))
 	}
 	d.out.WriteByte('}')
 	d.stack = d.stack[:len(d.stack)-1]
@@ -259,7 +261,7 @@ func stateAfterContainer(d *decoder, t token) error {
 		}
 
 	default:
-		return fmt.Errorf("unknown token after end of object or array - %s", t)
+		return atToken(t, fmt.Errorf("unknown token after end of object or array: %s", t))
 	}
 }
 
@@ -284,7 +286,7 @@ func stateArrayAfterStart(d *decoder, t token) error {
 
 func stateArrayEnd(d *decoder, t token) error {
 	if len(d.stack) == 0 || d.stack[len(d.stack)-1] != '[' {
-		return fmt.Errorf("unmatched array end")
+		return atToken(t, fmt.Errorf("unmatched array end"))
 	}
 	d.out.WriteByte(']')
 	d.stack = d.stack[:len(d.stack)-1]
@@ -299,23 +301,23 @@ func stateArrayValue(d *decoder, t token) error {
 		d.next = stateArrayAfterValue
 	case 'w':
 		if isNaN(t.value) {
-			return fmt.Errorf("NaN is not valid JSON")
+			return atToken(t, fmt.Errorf("NaN is not valid JSON"))
 		}
 		bareword(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case '0':
 		if err := writeInt(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateArrayAfterValue
 	case '1':
 		if err := writeFloat(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateArrayAfterValue
 	case '2':
 		if err := writeHex(d.out, t.value); err != nil {
-			return err
+			return atToken(t, err)
 		}
 		d.next = stateArrayAfterValue
 	case '{':
@@ -323,7 +325,7 @@ func stateArrayValue(d *decoder, t token) error {
 	case '[':
 		return stateArrayStart(d, t)
 	default:
-		return fmt.Errorf("unknown token for array value - %s", t)
+		return atToken(t, fmt.Errorf("unknown token for array value: %s", t))
 	}
 	return nil
 }
@@ -342,7 +344,7 @@ func stateArrayAfterValue(d *decoder, t token) error {
 		d.out.WriteByte(',')
 		return stateArrayValue(d, t)
 	}
-	return fmt.Errorf("unknown token after array value - %s", t)
+	return atToken(t, fmt.Errorf("unknown token after array value: %s", t))
 }
 
 func isNull(b []byte) bool {
