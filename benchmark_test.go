@@ -10,6 +10,14 @@ import (
 	"testing"
 )
 
+func BenchmarkFromJSONOnly(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := FromJSON5([]byte(frontmatter1JSON)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
 func BenchmarkFromYAMLOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
@@ -18,6 +26,25 @@ func BenchmarkFromYAMLOnly(b *testing.B) {
 		}
 	}
 }
+
+const frontmatter1JSON = `{
+   "date": "2024-02-02T04:14:54-08:00",
+   "draft": false,
+   "genres": [
+      "mystery",
+      "romance"
+   ],
+   "tags": [
+      "red",
+      "blue"
+   ],
+   "title": "Example",
+   "weight": 10,
+   "params": {
+      "author": "John Smith"
+   },
+}
+`
 
 const frontmatter1TOML = `date = 2024-02-02T04:14:54-08:00
 draft = false
