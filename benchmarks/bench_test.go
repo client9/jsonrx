@@ -13,6 +13,25 @@ import (
 	"github.com/client9/tojson"
 )
 
+const frontmatter1JSON=`{
+  "date": "2024-02-02T04:14:54-08:00",
+  "draft": false,
+  "genres": [
+    "mystery",
+    "romance"
+  ],
+  "params": {
+    "author": "John Smith"
+  },
+  "tags": [
+    "red",
+    "blue"
+  ],
+  "title": "Example",
+  "weight": 10
+}
+`
+
 const frontmatter1YAML = `date: 2024-02-02T04:14:54-08:00
 draft: false
 genres:
@@ -36,6 +55,30 @@ weight = 10
 [params]
   author = 'John Smith'
 `
+
+func BenchmarkFromStdlibJSON(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(frontmatter1JSON), &m); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFromJSONVariant(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		raw, err := tojson.FromYAML([]byte(frontmatter1JSON))
+		if err != nil {
+			b.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
 
 func BenchmarkFromYAML(b *testing.B) {
 	b.ReportAllocs()

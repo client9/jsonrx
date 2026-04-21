@@ -6,9 +6,23 @@
 - All libraries were benchmarked by decoding into `map[string]any`.
 - For `tojson`, that means converting the input to JSON and then decoding with `encoding/json`.
 
+## JSON Variants
+
+Summary: Parsing JSON variants is around 2x slower, and 3x more memory.
+
+It's slower is every number and string needs to be checked and normalized. The whole document is effectively parsed twice.
+
+| Package | Per Call | Memory | Allocations |
+|---------------------------------|------------:|------------:|-------------:|
+| **tojson.FromJSONVariants**     |  6723 ns/op |   5720 B/op | 70 allocs/op |
+| Go `encoding/json`              |  3554 ns/op |   1608 B/op | 47 allocs/op |
+
+
 ## YAML
 
 Summary: 3x-5x faster, and used 3-5x less memory.
+
+Restricting objects to have only string keys, and not storing state with aliases and tags really pays off.
 
 | Package | Per Call | Memory | Allocations |
 |-------------------------------------------------------------------------|------------:|------------:|--------------:|
@@ -20,6 +34,8 @@ Summary: 3x-5x faster, and used 3-5x less memory.
 ## TOML
 
 Summary: Used about 2x less memory.  Performance ranged from 0.8x to 2x.
+
+Compared to `BurntSushi/toml`, it's 2x faster and 2x less memory.  Compared to `pelletier/go-toml` is more mixed.  About 2x less memory, but ran 20% slower.  If you are only parsing TOML, `pelletier/go-toml` is worth evaluating.
 
 | Package | Per Call | Memory | Allocations |
 |-------------------------------------------------------------------|------------:|----------:|-------------:|
