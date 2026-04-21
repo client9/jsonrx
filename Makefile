@@ -19,5 +19,4 @@ lint:
 
 clean:
 	rm -f cover.out
-
-	
+	rm -f tojson
