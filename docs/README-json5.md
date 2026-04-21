@@ -38,6 +38,7 @@ Convert alternative JSON formats back to spec so you can get on with your life.
 
 ## Additional Reading
 
+* [Wikipedia](https://en.wikipedia.org/wiki/JSON)
 * [Wuffs' Quirks Mode for JSON Parsing](https://github.com/google/wuffs/blob/3d6c609dc12de3c81e1b8079ceecf96370b086a2/std/json/decode_quirks.wuffs)
 * [Awesome JSON](https://github.com/json-next/awesome-json-next)
 
