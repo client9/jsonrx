@@ -8,16 +8,11 @@ import "bytes"
 func FromJSON5(src []byte) ([]byte, error) {
 	dst := bytes.Buffer{}
 	dst.Grow(len(src))
-	err := FromJSON5Append(&dst, src)
-	return dst.Bytes(), err
-}
-
-// FromJSON5Append is the append variant of FromJSON5; it writes the result into dst.
-func FromJSON5Append(dst *bytes.Buffer, src []byte) error {
 	d := decoder{
-		out: dst,
+		out: &dst,
 	}
-	return d.Translate(src)
+	err := d.Translate(src)
+	return dst.Bytes(), err
 }
 
 // FromYAML converts a YAML subset to standard JSON.

@@ -113,7 +113,8 @@ func BenchmarkDecodeFile(b *testing.B) {
 
 	for b.Loop() {
 		dst.Reset()
-		err := FromJSON5Append(&dst, data)
+		d := decoder{out: &dst}
+		err := d.Translate(data)
 		if err != nil && err != io.EOF {
 			b.Errorf("JsonRx - Decode failed %v", err)
 		}
@@ -125,7 +126,8 @@ func BenchmarkJson(b *testing.B) {
 		log.Fatalf("Cant read file - %v", err)
 	}
 	var dst bytes.Buffer
-	err = FromJSON5Append(&dst, data)
+	d := decoder{out: &dst}
+	err = d.Translate(data)
 	if err != nil && err != io.EOF {
 		b.Errorf("JsonRx - Decode failed %v", err)
 	}
