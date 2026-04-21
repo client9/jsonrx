@@ -1,9 +1,10 @@
 # Performance
 
-- Tested April 2026, on Apple M4:
-- Input is typical frontmatter as found in markdown documents for blog content.
-- All converted the bytes to a `map[string]any`.  This packaged used the standard `encoding/json` for marshaling.
-
+- Generated using `make compare`
+- Benchmarks were run in April 2026 on an Apple M4 using Go 1.26.2
+- Inputs were typical frontmatter-style documents from markdown content.
+- All libraries were benchmarked by decoding into `map[string]any`.
+- For `tojson`, that means converting the input to JSON and then decoding with `encoding/json`.
 
 ## YAML
 
@@ -21,9 +22,9 @@ BenchmarkSigsK8sYAMLToMap-10               62505             19078 ns/op        
 
 Summary: Used about 2x less memory.  Performance ranged from 0.8x to 2x.
 
-```
-BenchmarkFromTOML-10                      221962              5317 ns/op            2616 B/op         63 allocs/op
-
-BenchmarkBurntSushiTOMLToMap-10           115405             10347 ns/op            5840 B/op         99 allocs/op
-BenchmarkPelletierTOMLToMap-10            261597              4533 ns/op            4816 B/op         68 allocs/op
+| Package | Per Call | Memory | Allocations |
+|---------|----------|--------|-------------|
+| **tojson.FromTOML**                                          |  5317 ns/op | 2616 B/op | 63 allocs/op |
+| [BurntSushi/toml](https://github.com/BurntSushi/toml) v1.6.0 | 10347 ns/op | 5840 B/op | 99 allocs/op |
+| [pelletier/go-toml](github.com/pelletier/go-toml) v2.3.0     |  4533 ns/op | 4816 B/op | 68 allocs/op |
 ```
