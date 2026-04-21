@@ -7,5 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- working to v0.0.1
+- public API is stable
+- working to v1.0.0
 
