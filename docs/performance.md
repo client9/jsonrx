@@ -10,13 +10,12 @@
 
 Summary: 3x-5x faster, and used 3-5x less memory.
 
-```
-BenchmarkFromYAML-10                      210936              5454 ns/op            3656 B/op         65 allocs/op
-
-BenchmarkYAMLv3ToMap-10                    74374             16080 ns/op           12752 B/op        170 allocs/op
-BenchmarkGoccyGoYAMLToMap-10               47630             25073 ns/op           21456 B/op        488 allocs/op
-BenchmarkSigsK8sYAMLToMap-10               62505             19078 ns/op           13799 B/op        238 allocs/op
-```
+| Package | Per Call | Memory | Allocations |
+|-------------------------------------------------------------------------|------------:|------------:|--------------:|
+| **tojson.FromYAML**                                                     |  5454 ns/op |   3656 B/op |  65 allocs/op |
+| [go-yaml/yaml](https://github.com/go-yaml/yaml) v3.0.1                  | 16080 ns/op |  12752 B/op | 170 allocs/op |
+| [goccy/go-yaml](https://github.com/goccy/go-yaml) v1.19.2               | 25073 ns/op |  21456 B/op | 488 allocs/op |
+| [kubernetes-sigs/yaml](https://github.com/kubernetes-sigs/yaml) v1.6.0  | 19078 ns/op |  13799 B/op | 238 allocs/op |
 
 ## TOML
 
@@ -27,4 +26,4 @@ Summary: Used about 2x less memory.  Performance ranged from 0.8x to 2x.
 | **tojson.FromTOML**                                               |  5317 ns/op | 2616 B/op | 63 allocs/op |
 | [BurntSushi/toml](https://github.com/BurntSushi/toml) v1.6.0      | 10347 ns/op | 5840 B/op | 99 allocs/op |
 | [pelletier/go-toml](https://github.com/pelletier/go-toml) v2.3.0  |  4533 ns/op | 4816 B/op | 68 allocs/op |
-```
+
