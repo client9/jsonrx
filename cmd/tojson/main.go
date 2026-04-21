@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"github.com/client9/tojson"
@@ -44,7 +45,17 @@ func main() {
 	compact := flag.Bool("compact", false, "compact JSON output (default)")
 	raw := flag.Bool("raw", false, "raw output from conversion, no post-processing")
 	format := flag.String("f", "", "input format: yaml, toml, json5 (required when reading stdin)")
+	version := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *version {
+		v := "(devel)"
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+			v = info.Main.Version
+		}
+		fmt.Println(v)
+		os.Exit(0)
+	}
 
 	modeCount := 0
 	for _, b := range []bool{*pretty, *compact, *raw} {
