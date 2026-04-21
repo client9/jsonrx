@@ -160,8 +160,10 @@ func TestDecodeNumbers(t *testing.T) {
 			"-Infinity",
 			"-9007199254740992",
 		},
-		// large integer overflow → falls through to writeFloat
+		// large integer → falls through to writeFloat and normalizes
 		{"+99999999999999999", "1e+17"},
+		// hex: full uint64 range
+		{"0xFFFFFFFFFFFFFFFF", "18446744073709551615"},
 	}
 
 	for _, tt := range cases {
@@ -175,6 +177,30 @@ func TestDecodeNumbers(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeNumberErrors(t *testing.T) {
+	cases := []string{
+		// hex overflow: 2^64, exceeds uint64
+		"0x10000000000000000",
+		// float overflow: +prefix strips JSON validity, value exceeds float64
+		"+1e309",
+		// float overflow in object value
+		`{"x":+1e309}`,
+		// float overflow in array
+		`[+1e309]`,
+		// hex overflow in object value
+		`{"x":0x10000000000000000}`,
+		// hex overflow in array
+		`[0x10000000000000000]`,
+	}
+	for _, in := range cases {
+		_, err := FromJSON5([]byte(in))
+		if err == nil {
+			t.Errorf("FromJSON5(%q): expected error, got nil", in)
+		}
+	}
+}
+
 func TestDecodeStrings(t *testing.T) {
 	cases := []testcase{
 		{

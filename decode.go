@@ -75,13 +75,19 @@ func stateValue(d *decoder, t token) error {
 		writeString(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '0':
-		writeInt(d.out, t.value)
+		if err := writeInt(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateObjectAfterValue
 	case '1':
-		writeFloat(d.out, t.value)
+		if err := writeFloat(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateObjectAfterValue
 	case '2':
-		writeHex(d.out, t.value)
+		if err := writeHex(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateObjectAfterValue
 	case 'w':
 		if isNaN(t.value) {
@@ -151,13 +157,19 @@ func stateObjectValue(d *decoder, t token) error {
 		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case '0':
-		writeInt(d.out, t.value)
+		if err := writeInt(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateObjectAfterValue
 	case '1':
-		writeFloat(d.out, t.value)
+		if err := writeFloat(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateObjectAfterValue
 	case '2':
-		writeHex(d.out, t.value)
+		if err := writeHex(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateObjectAfterValue
 	case '{':
 		return stateObjectStart(d, t)
@@ -292,13 +304,19 @@ func stateArrayValue(d *decoder, t token) error {
 		bareword(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case '0':
-		writeInt(d.out, t.value)
+		if err := writeInt(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateArrayAfterValue
 	case '1':
-		writeFloat(d.out, t.value)
+		if err := writeFloat(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateArrayAfterValue
 	case '2':
-		writeHex(d.out, t.value)
+		if err := writeHex(d.out, t.value); err != nil {
+			return err
+		}
 		d.next = stateArrayAfterValue
 	case '{':
 		return stateObjectStart(d, t)
@@ -356,15 +374,14 @@ func isFalse(b []byte) bool {
 		b[4] == 'e'
 }
 
-func writeInt(out *bytes.Buffer, b0 []byte) {
+func writeInt(out *bytes.Buffer, b0 []byte) error {
 
 	// assert -- should never happen
 	if len(b0) == 0 {
-		return
+		return nil
 	}
 
 	b := b0
-	//leading := false
 	if b[0] == '-' || b[0] == '+' {
 		b = b[1:]
 	}
@@ -387,12 +404,11 @@ func writeInt(out *bytes.Buffer, b0 []byte) {
 	}
 
 	if overflow {
-		writeFloat(out, b0)
-		return
+		return writeFloat(out, b0)
 	}
 	if notint {
 		bareword(out, b0)
-		return
+		return nil
 	}
 
 	b = b0
@@ -409,42 +425,38 @@ func writeInt(out *bytes.Buffer, b0 []byte) {
 	if len(b) == 0 {
 		// "+00000" or "0000"
 		out.WriteByte('0')
-		return
+		return nil
 	}
 
 	out.Write(b)
+	return nil
 }
 
 // Unoptimized since it's a rare feature
-func writeHex(out *bytes.Buffer, b []byte) {
-
-	// need to slice off initial "0x" or "0X"
+func writeHex(out *bytes.Buffer, b []byte) error {
+	// slice off "0x" or "0X"
 	s := string(b[2:])
-	numInt, err := strconv.ParseInt(s, 16, 64)
+	num, err := strconv.ParseUint(s, 16, 64)
 	if err == nil {
-		out.WriteString(strconv.FormatInt(numInt, 10))
-		return
+		out.WriteString(strconv.FormatUint(num, 10))
+		return nil
 	}
-	// TODO - Overflow
-	bareword(out, b)
+	return fmt.Errorf("hex literal %s overflows uint64", b)
 }
 
-func writeFloat(out *bytes.Buffer, b []byte) {
+func writeFloat(out *bytes.Buffer, b []byte) error {
 	if isValidNumber(b) {
 		out.Write(b)
-		return
+		return nil
 	}
 
-	// TODO
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.24.3:src/encoding/json/encode.go
 	num, err := strconv.ParseFloat(string(b), 64)
 	if err == nil {
 		out.WriteString(strconv.FormatFloat(num, 'g', -1, 64))
-		return
+		return nil
 	}
-
-	// TODO - overflow
-	out.Write(b)
+	return fmt.Errorf("number %s overflows float64", b)
 }
 
 func bareword(out *bytes.Buffer, b []byte) {
@@ -461,8 +473,6 @@ func bareword(out *bytes.Buffer, b []byte) {
 		out.Write(minSafeInteger)
 		return
 	}
-
-	// TODO Nan
 
 	// something else
 	out.Write(b)
