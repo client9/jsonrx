@@ -40,6 +40,17 @@ func convert(format string, input []byte) ([]byte, error) {
 	}
 }
 
+func writeOutput(w io.Writer, out []byte, raw bool) error {
+	if _, err := w.Write(out); err != nil {
+		return err
+	}
+	if raw {
+		return nil
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
 func main() {
 	pretty := flag.Bool("pretty", false, "pretty-print JSON output")
 	compact := flag.Bool("compact", false, "compact JSON output (default)")
@@ -113,8 +124,7 @@ func main() {
 		}
 	}
 
-	os.Stdout.Write(out)
-	if !*raw {
-		os.Stdout.WriteString("\n")
+	if err := writeOutput(os.Stdout, out, *raw); err != nil {
+		fatalf("writing stdout: %v", err)
 	}
 }
