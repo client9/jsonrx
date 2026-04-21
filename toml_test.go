@@ -1,7 +1,6 @@
 package tojson
 
 import (
-	"bytes"
 	"encoding/json"
 	"testing"
 )
@@ -332,21 +331,5 @@ func TestTOMLParseErrorString(t *testing.T) {
 	e2 := &ParseError{Line: 5, Column: 3, Message: "bad token"}
 	if got, want := e2.Error(), "line 5, column 3: bad token"; got != want {
 		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-// --------------------------------------------------------------------------
-// FromTOMLAppend
-// --------------------------------------------------------------------------
-
-func TestFromTOMLAppend(t *testing.T) {
-	var b bytes.Buffer
-	b.WriteString(`[`)
-	if err := FromTOMLAppend(&b, []byte("n = 42")); err != nil {
-		t.Fatal(err)
-	}
-	b.WriteString(`]`)
-	if got := b.String(); got != `[{"n":42}]` {
-		t.Errorf("got %s, want [{\"n\":42}]", got)
 	}
 }

@@ -556,17 +556,3 @@ func TestFlowDepthSingleQuoteEscape(t *testing.T) {
 		}
 	}
 }
-
-func TestFromYAMLAppend(t *testing.T) {
-	var buf []byte
-	b := &bytes.Buffer{}
-	b.WriteString(`[`)
-	if err := FromYAMLAppend(b, []byte("42")); err != nil {
-		t.Fatal(err)
-	}
-	b.WriteString(`]`)
-	buf = b.Bytes()
-	if string(buf) != `[42]` {
-		t.Errorf("got %s, want [42]", buf)
-	}
-}

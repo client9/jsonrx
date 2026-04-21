@@ -8,16 +8,15 @@
 //	if err != nil { ... }
 //	json.Unmarshal(raw, &cfg)
 //
-// Each format has a primary function and an append variant:
+// JSON5 has both a primary function and an append variant:
 //
 //	tojson.FromJSON5(src []byte) ([]byte, error)
 //	tojson.FromJSON5Append(dst *bytes.Buffer, src []byte) error
 //
-//	tojson.FromYAML(src []byte) ([]byte, error)
-//	tojson.FromYAMLAppend(dst *bytes.Buffer, src []byte) error
+// YAML and TOML use the primary conversion form:
 //
+//	tojson.FromYAML(src []byte) ([]byte, error)
 //	tojson.FromTOML(src []byte) ([]byte, error)
-//	tojson.FromTOMLAppend(dst *bytes.Buffer, src []byte) error
 //
 // Parse errors are returned as *ParseError, which carries a 1-based line
 // and column number and can be inspected with errors.As:
