@@ -3,8 +3,6 @@ Convert alternative JSON formats back to spec so you can get on with your life.
 
 ## WIP -- Not quite ready!
 
-The public API of `Decode` and `DecodeAppend` are stable and works.
-
 * However a lot more work needs to be done on error cases.  Row/Collum numbers on errors are likely wrong
 
 ## What does it do?
@@ -22,19 +20,19 @@ The public API of `Decode` and `DecodeAppend` are stable and works.
 - [x] Remove '+' sign from integers (JSON5)
 - [x] Remove leading zeros from numbers, e.g. "01"
 - [x] Normalize floats ".5" to "0.5", "5." to "5"
-- [x] Convert [+/-]Infinity [+/-]2^53 -1 (largest/smallest possible integer)
-- [x] Normalize string escape sequences (mostly done)
+- [x] Convert [+/-]Infinity to [+/-]2^53 -1 (largest/smallest possible integer)
+- [x] Normalize string escape sequences
 - [x] Convert "\r\n" to "\n"
-- [x] NaN is an error (not representable in JSON)
 - [x] Convert \x?? hex escapes
+- [x] NaN is an error (not representable in JSON)
 
 ## Supported JSON Variants
 
-- [HuJSON](https://github.com/tailscale/hujson)
-- [JWCC](https://nigeltao.github.io/blog/2021/json-with-commas-comments.html)
-- [JSON5](https://json5.org)
-- [JSONC #2](https://code.visualstudio.com/docs/languages/json#_json-with-comments)
-- [SON](https://github.com/aleksandergurin/simple-object-notation)
+- [HuJSON](https://github.com/tailscale/hujson) (ending commas, C-style comments)
+- [JWCC](https://nigeltao.github.io/blog/2021/json-with-commas-comments.html) (ending commas, C-style comments)
+- [JSON5](https://json5.org) (JSON as Javascript)
+- [JSONC #2](https://code.visualstudio.com/docs/languages/json#_json-with-comments) (ending commas)
+- [SON](https://github.com/aleksandergurin/simple-object-notation) (ending commas, `#` comments)
 - [HanSON](https://github.com/timjansen/hanson)
 - [JSONX](https://github.com/json-next)
 
