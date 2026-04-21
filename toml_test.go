@@ -287,22 +287,50 @@ func TestTOMLErrorInlineTableTrailingComma(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLParseErrorLineNumber(t *testing.T) {
-	_, err := FromTOML([]byte("a = 1\nb = \"unclosed"))
-	if err == nil {
-		t.Fatal("expected error")
+	cases := []struct {
+		name   string
+		input  string
+		line   int
+		column int
+	}{
+		// simple value error: streaming fast path
+		{"unterminated string line 2", "a = 1\nb = \"unclosed", 2, 5},
+		// value error first line
+		{"inf not valid", "b = inf", 1, 5},
+		// malformed table header: structural, column at start of content
+		{"malformed table header", "[bad header", 1, 1},
+		// dotted key value error: streaming slow path
+		{"dotted key unterminated", `a.b = "unclosed`, 1, 7},
 	}
-	pe, ok := err.(*ParseError)
-	if !ok {
-		t.Fatalf("expected *ParseError, got %T: %v", err, err)
-	}
-	if pe.Line != 2 {
-		t.Errorf("expected line 2, got %d", pe.Line)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := FromTOML([]byte(tc.input))
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T: %v", err, err)
+			}
+			if pe.Line != tc.line {
+				t.Errorf("expected line %d, got %d (msg: %s)", tc.line, pe.Line, pe.Message)
+			}
+			if pe.Column != tc.column {
+				t.Errorf("expected column %d, got %d (msg: %s)", tc.column, pe.Column, pe.Message)
+			}
+		})
 	}
 }
 
 func TestTOMLParseErrorString(t *testing.T) {
-	e := &ParseError{Line: 5, Msg: "bad token"}
+	// Column=0 means not available: omit from message.
+	e := &ParseError{Line: 5, Message: "bad token"}
 	if got, want := e.Error(), "line 5: bad token"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// Column>0: include in message.
+	e2 := &ParseError{Line: 5, Column: 3, Message: "bad token"}
+	if got, want := e2.Error(), "line 5, column 3: bad token"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

@@ -122,13 +122,13 @@ func (p *parser) parseBlock(parentIndent int, buf *bytes.Buffer) error {
 		if isFlowValue(l.content) {
 			src, last := p.gatherFlowSrc(l.content, rawLine)
 			if err := parseFlowExpr(src, buf); err != nil {
-				return atLine(rawLine, err)
+				return atLineCol(rawLine, l.indent, err)
 			}
 			p.skipPastRawLine(last)
 			return nil
 		}
 		if err := writeScalar(l.content, buf); err != nil {
-			return atLine(rawLine, err)
+			return atLineCol(rawLine, l.indent, err)
 		}
 		return nil
 	}
@@ -165,12 +165,12 @@ func (p *parser) parseMapping(indent int, buf *bytes.Buffer) error {
 		} else if isFlowValue(rest) {
 			src, last := p.gatherFlowSrc(rest, rawLine)
 			if err := parseFlowExpr(src, buf); err != nil {
-				return atLine(rawLine, err)
+				return atLineCol(rawLine, l.indent+len(l.content)-len(rest), err)
 			}
 			p.skipPastRawLine(last)
 		} else {
 			if err := writeScalar(rest, buf); err != nil {
-				return atLine(rawLine, err)
+				return atLineCol(rawLine, l.indent+len(l.content)-len(rest), err)
 			}
 		}
 	}
@@ -211,17 +211,18 @@ func (p *parser) parseSequence(indent int, buf *bytes.Buffer) error {
 		} else if isFlowValue(rest) {
 			src, last := p.gatherFlowSrc(rest, rawLine)
 			if err := parseFlowExpr(src, buf); err != nil {
-				return atLine(rawLine, err)
+				return atLineCol(rawLine, l.indent+len(l.content)-len(rest), err)
 			}
 			p.skipPastRawLine(last)
 		} else {
 			if isMapKey(rest) {
-				if err := p.parseInlineMap(rest, l.indent+2, rawLine, buf); err != nil {
+				firstLineCol := l.indent + len(l.content) - len(rest)
+				if err := p.parseInlineMap(rest, l.indent+2, rawLine, firstLineCol, buf); err != nil {
 					return err
 				}
 			} else {
 				if err := writeScalar(rest, buf); err != nil {
-					return atLine(rawLine, err)
+					return atLineCol(rawLine, l.indent+len(l.content)-len(rest), err)
 				}
 			}
 		}
@@ -235,10 +236,10 @@ func (p *parser) parseSequence(indent int, buf *bytes.Buffer) error {
 //
 //   - name: Alice
 //     age: 30
-func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine int, buf *bytes.Buffer) error {
+func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine int, firstLineCol int, buf *bytes.Buffer) error {
 	buf.WriteByte('{')
 
-	writeKeyValue := func(line []byte, rawLine int) error {
+	writeKeyValue := func(line []byte, rawLine int, lineCol int) error {
 		key, rest := splitMapKey(line)
 		writeJSONString(key, buf)
 		buf.WriteByte(':')
@@ -249,18 +250,18 @@ func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine i
 		} else if isFlowValue(rest) {
 			src, last := p.gatherFlowSrc(rest, rawLine)
 			if err := parseFlowExpr(src, buf); err != nil {
-				return atLine(rawLine, err)
+				return atLineCol(rawLine, lineCol+len(line)-len(rest), err)
 			}
 			p.skipPastRawLine(last)
 		} else {
 			if err := writeScalar(rest, buf); err != nil {
-				return atLine(rawLine, err)
+				return atLineCol(rawLine, lineCol+len(line)-len(rest), err)
 			}
 		}
 		return nil
 	}
 
-	if err := writeKeyValue(firstLine, startRawLine); err != nil {
+	if err := writeKeyValue(firstLine, startRawLine, firstLineCol); err != nil {
 		return err
 	}
 
@@ -272,7 +273,7 @@ func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine i
 		buf.WriteByte(',')
 		p.consume()
 		rawLine := p.rawIdx[p.pos-1]
-		if err := writeKeyValue(l.content, rawLine); err != nil {
+		if err := writeKeyValue(l.content, rawLine, l.indent); err != nil {
 			return err
 		}
 	}

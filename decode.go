@@ -34,6 +34,7 @@ type decoder struct {
 	stack   []byte
 	next    stateFunction
 	lastRow int
+	lastCol int
 }
 
 type stateFunction func(d *decoder, t token) error
@@ -48,7 +49,7 @@ func (d *decoder) Translate(src []byte) error {
 			if len(d.stack) == 0 {
 				return nil
 			}
-			return &ParseError{Line: d.lastRow + 1, Msg: "got end of file prematurely"}
+			return &ParseError{Line: d.lastRow + 1, Column: d.lastCol + 1, Message: "got end of file prematurely"}
 		}
 		if err != nil {
 			return err
@@ -59,6 +60,7 @@ func (d *decoder) Translate(src []byte) error {
 			continue
 		}
 		d.lastRow = t.row
+		d.lastCol = t.col
 		err = d.next(d, t)
 
 		if err != nil {

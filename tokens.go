@@ -91,11 +91,15 @@ func (tx *tokenizer) string() (token, error) {
 	qchar := tx.data[0]
 
 	skip := false
+	// lineCol tracks the column of the most recently processed byte on the
+	// current line, so we can update tx.col correctly after the string ends.
+	lineCol := tx.col // opening quote column
 	for i, b := range tx.data[1:] {
 		switch b {
 		case qchar:
 			if skip {
 				skip = false
+				lineCol++
 				continue
 			}
 			// +1 for the first char we skipped in loop
@@ -108,30 +112,35 @@ func (tx *tokenizer) string() (token, error) {
 				col:   tx.col,
 			}
 			tx.data = tx.data[i:]
+			tx.col = lineCol + 2 // advance past closing quote
 			return t, nil
 		case backslash:
 			skip = true
+			lineCol++
 		case newline:
 			if !skip && qchar == backQuote {
 				tx.row += 1
+				lineCol = -1
 				continue
 			}
 
 			if !skip {
-				return token{}, &ParseError{Line: tx.row + 1, Msg: "unescaped newline in string"}
+				return token{}, &ParseError{Line: tx.row + 1, Column: tx.col + 1, Message: "unescaped newline in string"}
 			}
 			skip = false
 			tx.row += 1
+			lineCol = -1
 			// remap from \[newline] to \n
 			tx.data[i] = 'n'
 		default:
 			if skip {
 				skip = false
 			}
+			lineCol++
 		}
 	}
 	// always an error
-	return token{}, &ParseError{Line: tx.row + 1, Msg: "quoted string fell off edge"}
+	return token{}, &ParseError{Line: tx.row + 1, Column: tx.col + 1, Message: "quoted string fell off edge"}
 }
 
 func (tx *tokenizer) comment() (token, error) {
@@ -154,6 +163,7 @@ func (tx *tokenizer) commentMulti() (token, error) {
 	endAster := false
 	row := tx.row
 	col := tx.col
+	tx.col += 2 // account for /*
 	var i int
 	for i, b := range tx.data[2:] {
 		switch b {
@@ -164,6 +174,7 @@ func (tx *tokenizer) commentMulti() (token, error) {
 			tx.col += 1
 			endAster = true
 		case slash:
+			tx.col += 1
 			if endAster {
 				i += 3
 				t := token{
@@ -175,6 +186,7 @@ func (tx *tokenizer) commentMulti() (token, error) {
 				tx.data = tx.data[i:]
 				return t, nil
 			}
+			endAster = false
 		default:
 			endAster = false
 			tx.col += 1

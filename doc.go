@@ -20,10 +20,10 @@
 //	tojson.FromTOMLAppend(dst *bytes.Buffer, src []byte) error
 //
 // Parse errors are returned as *ParseError, which carries a 1-based line
-// number and can be inspected with errors.As:
+// and column number and can be inspected with errors.As:
 //
 //	var pe *tojson.ParseError
 //	if errors.As(err, &pe) {
-//	    fmt.Printf("line %d: %s\n", pe.Line, pe.Msg)
+//	    fmt.Printf("line %d: %s\n", pe.Line, pe.Message)
 //	}
 package tojson

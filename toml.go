@@ -151,17 +151,18 @@ func (p *tomlParser) parseDocument() error {
 		if len(trimmed) == 0 || trimmed[0] == '#' {
 			continue
 		}
+		leading := leadingSpaces(line)
 		if bytes.HasPrefix(trimmed, []byte("[[")) {
 			if err := p.parseArrayTableHeader(trimmed); err != nil {
-				return atLine(p.lineIdx-1, err)
+				return atLineCol(p.lineIdx-1, leading, err)
 			}
 		} else if trimmed[0] == '[' {
 			if err := p.parseTableHeader(trimmed); err != nil {
-				return atLine(p.lineIdx-1, err)
+				return atLineCol(p.lineIdx-1, leading, err)
 			}
 		} else {
-			if err := p.parseKeyValue(trimmed, p.ctx); err != nil {
-				return atLine(p.lineIdx-1, err)
+			if err := p.parseKeyValue(trimmed, p.lineIdx-1, leading, p.ctx); err != nil {
+				return err
 			}
 		}
 	}
@@ -288,34 +289,35 @@ func (p *tomlParser) getOrCreateNode(root *jnode, path [][]byte, _ bool) (*jnode
 // Key-value parsing
 // --------------------------------------------------------------------------
 
-func (p *tomlParser) parseKeyValue(line []byte, ctx *jnode) error {
+func (p *tomlParser) parseKeyValue(line []byte, rawLine int, leading int, ctx *jnode) error {
 	path, rest, err := parseTOMLKeyPath(line)
 	if err != nil {
-		return err
+		return atLineCol(rawLine, leading, err)
 	}
 	rest = bytes.TrimSpace(rest)
 	if len(rest) == 0 || rest[0] != '=' {
-		return fmt.Errorf("expected '=' after key, got: %s", rest)
+		return atLineCol(rawLine, leading+len(line)-len(rest), fmt.Errorf("expected '=' after key, got: %s", rest))
 	}
 	rest = bytes.TrimSpace(rest[1:])
+	valCol := leading + len(line) - len(rest)
 
 	var targetNode *jnode
 	if len(path) > 1 {
 		targetNode, err = p.getOrCreateNode(ctx, path[:len(path)-1], false)
 		if err != nil {
-			return err
+			return atLineCol(rawLine, leading, err)
 		}
 	} else {
 		targetNode = ctx
 	}
 	lastKey := path[len(path)-1]
 	if targetNode.findPair(lastKey) != nil {
-		return fmt.Errorf("duplicate key %q", lastKey)
+		return atLineCol(rawLine, leading, fmt.Errorf("duplicate key %q", lastKey))
 	}
 
 	raw, consumed, err := parseTOMLValue(rest, p.rawLines, p.lineIdx-1)
 	if err != nil {
-		return err
+		return atLineCol(rawLine, valCol, err)
 	}
 	p.lineIdx += consumed
 
@@ -582,42 +584,43 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 		if len(trimmed) == 0 || trimmed[0] == '#' {
 			continue
 		}
+		leading := leadingSpaces(line)
 
 		if bytes.HasPrefix(trimmed, []byte("[[")) {
 			closeInlineTo(0)
 			if !bytes.HasSuffix(trimmed, []byte("]]")) {
-				return nil, atLine(lineIdx-1, fmt.Errorf("malformed array-of-tables header: %s", trimmed))
+				return nil, atLineCol(lineIdx-1, leading, fmt.Errorf("malformed array-of-tables header: %s", trimmed))
 			}
 			path, rest, err := parseTOMLKeyPath(trimmed[2 : len(trimmed)-2])
 			if err != nil {
-				return nil, atLine(lineIdx-1, err)
+				return nil, atLineCol(lineIdx-1, leading, err)
 			}
 			if rest = bytes.TrimSpace(rest); len(rest) != 0 {
-				return nil, atLine(lineIdx-1, fmt.Errorf("unexpected content after [[header]]: %s", rest))
+				return nil, atLineCol(lineIdx-1, leading, fmt.Errorf("unexpected content after [[header]]: %s", rest))
 			}
 			if err := openSection(path, true); err != nil {
 				if err == errReentry {
 					return nil, err
 				}
-				return nil, atLine(lineIdx-1, err)
+				return nil, atLineCol(lineIdx-1, leading, err)
 			}
 		} else if trimmed[0] == '[' {
 			closeInlineTo(0)
 			if trimmed[len(trimmed)-1] != ']' {
-				return nil, atLine(lineIdx-1, fmt.Errorf("malformed table header: %s", trimmed))
+				return nil, atLineCol(lineIdx-1, leading, fmt.Errorf("malformed table header: %s", trimmed))
 			}
 			path, rest, err := parseTOMLKeyPath(trimmed[1 : len(trimmed)-1])
 			if err != nil {
-				return nil, atLine(lineIdx-1, err)
+				return nil, atLineCol(lineIdx-1, leading, err)
 			}
 			if rest = bytes.TrimSpace(rest); len(rest) != 0 {
-				return nil, atLine(lineIdx-1, fmt.Errorf("unexpected content after [header]: %s", rest))
+				return nil, atLineCol(lineIdx-1, leading, fmt.Errorf("unexpected content after [header]: %s", rest))
 			}
 			if err := openSection(path, false); err != nil {
 				if err == errReentry {
 					return nil, err
 				}
-				return nil, atLine(lineIdx-1, err)
+				return nil, atLineCol(lineIdx-1, leading, err)
 			}
 		} else {
 			bareEnd := 0
@@ -640,7 +643,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 				rest := bytes.TrimLeft(trimmed[eqPos+1:], " \t")
 				closeInlineTo(0)
 				if err := markKey(key); err != nil {
-					return nil, atLine(lineIdx-1, err)
+					return nil, atLineCol(lineIdx-1, leading, err)
 				}
 				if topNC() {
 					buf.WriteByte(',')
@@ -649,20 +652,21 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 				buf.WriteByte(':')
 				consumed, err := writeTOMLValue(rest, lines, lineIdx-1, &buf)
 				if err != nil {
-					return nil, atLine(lineIdx-1, err)
+					return nil, atLineCol(lineIdx-1, leading+len(trimmed)-len(rest), err)
 				}
 				lineIdx += consumed
 				setTopNC(true)
 			} else {
 				path, rest, err := parseTOMLKeyPath(trimmed)
 				if err != nil {
-					return nil, atLine(lineIdx-1, err)
+					return nil, atLineCol(lineIdx-1, leading, err)
 				}
 				rest = bytes.TrimSpace(rest)
 				if len(rest) == 0 || rest[0] != '=' {
-					return nil, atLine(lineIdx-1, fmt.Errorf("expected '=' after key, got: %s", rest))
+					return nil, atLineCol(lineIdx-1, leading, fmt.Errorf("expected '=' after key, got: %s", rest))
 				}
 				rest = bytes.TrimSpace(rest[1:])
+				valCol := leading + len(trimmed) - len(rest)
 
 				lastKey := path[len(path)-1]
 				prefix := path[:len(path)-1]
@@ -678,7 +682,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 					closeInlineTo(cd)
 					for i := cd; i < len(prefix); i++ {
 						if err := markKey(prefix[i]); err != nil {
-							return nil, atLine(lineIdx-1, err)
+							return nil, atLineCol(lineIdx-1, leading, err)
 						}
 						if topNC() {
 							buf.WriteByte(',')
@@ -696,7 +700,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 				}
 
 				if err := markKey(lastKey); err != nil {
-					return nil, atLine(lineIdx-1, err)
+					return nil, atLineCol(lineIdx-1, leading, err)
 				}
 				if topNC() {
 					buf.WriteByte(',')
@@ -705,7 +709,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 				buf.WriteByte(':')
 				consumed, err := writeTOMLValue(rest, lines, lineIdx-1, &buf)
 				if err != nil {
-					return nil, atLine(lineIdx-1, err)
+					return nil, atLineCol(lineIdx-1, valCol, err)
 				}
 				lineIdx += consumed
 				setTopNC(true)

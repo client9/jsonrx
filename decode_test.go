@@ -303,19 +303,20 @@ func TestDecodeNaN(t *testing.T) {
 
 func TestJSON5ParseError(t *testing.T) {
 	cases := []struct {
-		name  string
-		input string
-		line  int
+		name   string
+		input  string
+		line   int
+		column int
 	}{
 		// unterminated string: error at the line the string started
-		{"unterminated string line 1", `"unclosed`, 1},
-		{"unterminated string line 3", "{\n  \"k\": \"v\",\n  \"bad\": \"unclosed\n}", 3},
+		{"unterminated string line 1", `"unclosed`, 1, 1},
+		{"unterminated string line 3", "{\n  \"k\": \"v\",\n  \"bad\": \"unclosed\n}", 3, 10},
 		// unescaped newline in double-quoted string: error at the offending line
-		{"unescaped newline line 2", "{\n  \"bad\": \"has\nnewline\"}", 2},
+		{"unescaped newline line 2", "{\n  \"bad\": \"has\nnewline\"}", 2, 10},
 		// NaN: error at the line containing NaN
-		{"NaN line 2", "[\n  NaN\n]", 2},
+		{"NaN line 2", "[\n  NaN\n]", 2, 3},
 		// hex overflow: error at the line containing the literal
-		{"hex overflow line 2", "[\n  0x10000000000000000\n]", 2},
+		{"hex overflow line 2", "[\n  0x10000000000000000\n]", 2, 3},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -328,7 +329,10 @@ func TestJSON5ParseError(t *testing.T) {
 				t.Fatalf("expected *ParseError, got %T: %v", err, err)
 			}
 			if pe.Line != tc.line {
-				t.Errorf("expected line %d, got %d (msg: %s)", tc.line, pe.Line, pe.Msg)
+				t.Errorf("expected line %d, got %d (msg: %s)", tc.line, pe.Line, pe.Message)
+			}
+			if pe.Column != tc.column {
+				t.Errorf("expected column %d, got %d (msg: %s)", tc.column, pe.Column, pe.Message)
 			}
 		})
 	}

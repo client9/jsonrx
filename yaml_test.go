@@ -249,20 +249,39 @@ func TestYAMLFlowMultiLine(t *testing.T) {
 }
 
 func TestYAMLParseError(t *testing.T) {
-	_, err := FromYAML([]byte(`key: "unterminated`))
-	if err == nil {
-		t.Fatal("expected error")
+	cases := []struct {
+		name   string
+		input  string
+		line   int
+		column int
+	}{
+		// mapping value: unterminated string
+		{"mapping unterminated line 1", `key: "unterminated`, 1, 6},
+		{"mapping unterminated line 3", "a: 1\nb: 2\nc: \"bad", 3, 4},
+		// sequence item: unterminated string (after "- ")
+		{"sequence unterminated", `- "bad`, 1, 3},
+		// nested mapping value
+		{"nested mapping unterminated", "foo:\n  bar: \"bad", 2, 8},
+		// flow value: unterminated mapping
+		{"flow unterminated mapping", "key: {a: 1", 1, 6},
 	}
-	pe, ok := err.(*ParseError)
-	if !ok {
-		t.Fatalf("expected *ParseError, got %T: %v", err, err)
-	}
-	if pe.Line != 1 {
-		t.Errorf("expected line 1, got %d", pe.Line)
-	}
-	_, err = FromYAML([]byte("a: 1\nb: 2\nc: \"bad"))
-	if pe, ok = err.(*ParseError); !ok || pe.Line != 3 {
-		t.Errorf("expected line 3 error, got %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := FromYAML([]byte(tc.input))
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T: %v", err, err)
+			}
+			if pe.Line != tc.line {
+				t.Errorf("expected line %d, got %d (msg: %s)", tc.line, pe.Line, pe.Message)
+			}
+			if pe.Column != tc.column {
+				t.Errorf("expected column %d, got %d (msg: %s)", tc.column, pe.Column, pe.Message)
+			}
+		})
 	}
 }
 
@@ -329,7 +348,7 @@ key: >-
 }
 
 func TestYAMLParseErrorString(t *testing.T) {
-	e := &ParseError{Line: 3, Msg: "bad token"}
+	e := &ParseError{Line: 3, Message: "bad token"}
 	if got, want := e.Error(), "line 3: bad token"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -427,7 +446,7 @@ func TestYAMLAtLine(t *testing.T) {
 	if got := atLine(0, nil); got != nil {
 		t.Errorf("atLine(nil) = %v, want nil", got)
 	}
-	pe := &ParseError{Line: 5, Msg: "original"}
+	pe := &ParseError{Line: 5, Message: "original"}
 	if got := atLine(10, pe); got != pe {
 		t.Errorf("atLine(ParseError) did not pass through: got %v", got)
 	}
