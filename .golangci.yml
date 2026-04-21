@@ -4,11 +4,7 @@ linters:
     - godoclint
     - gochecknoinits
   disable:
-    - staticcheck
   settings:
-    gocritic:
-      disabled-checks:
-        - appendAssign
   exclusions:
     generated: lax
     presets:
@@ -20,6 +16,9 @@ linters:
       - linters:
           - errcheck
         path: _test\.go
+      - linters:
+          - staticcheck
+        text: "QF1003"
     paths:
       - third_party$
       - builtin$
