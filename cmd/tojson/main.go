@@ -33,7 +33,7 @@ func convert(format string, input []byte) ([]byte, error) {
 		return tojson.FromYAML(input)
 	case "toml":
 		return tojson.FromTOML(input)
-	case "json5", "json", "jsonc", "hjson":
+	case "json5", "json", "jsonc", "hjson", "hson":
 		return tojson.FromJSON5(input)
 	default:
 		return nil, fmt.Errorf("unknown format %q", format)
