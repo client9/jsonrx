@@ -226,6 +226,8 @@ func TestYAMLFlowMapping(t *testing.T) {
 name: Alice
 tags: {go: true, yaml: false}
 `, `{"name":"Alice","tags":{"go":true,"yaml":false}}`)
+	// single-quoted value with '' escape inside a flow mapping (exercises flowDepth i++ branch)
+	roundtripYAML(t, `{key: 'it''s fine'}`, `{"key":"it's fine"}`)
 }
 
 func TestYAMLFlowSequence(t *testing.T) {
@@ -390,6 +392,10 @@ func TestYAMLFlowErrors(t *testing.T) {
 		{"missing comma in sequence", `[{a: 1} {b: 2}]`},
 		{"unterminated string in flow", `{"key": "bad`},
 		{"multiline unterminated mapping", "key: {a: 1,"},
+		// unterminated double-quoted key — exercises parseFlowMapping flowParseKey error return
+		{"unterminated quoted key in flow mapping", `{"bad key: 1}`},
+		// unterminated double-quoted item — exercises parseFlowSequence flowParseItem error return
+		{"unterminated quoted item in flow sequence", `["bad item]`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -482,6 +488,53 @@ func TestYAMLParseErrorPaths(t *testing.T) {
 				t.Errorf("expected error for input %q", tc.input)
 			}
 		})
+	}
+}
+
+// TestParseFlowExprDirect exercises the empty-string and bare-scalar branches of
+// parseFlowExpr, which are unreachable via isFlowValue but exist as defensive cases.
+func TestParseFlowExprDirect(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", "null"},
+		{"   ", "null"},
+		{"hello", `"hello"`},
+		{"42", "42"},
+	}
+	for _, tc := range cases {
+		var buf bytes.Buffer
+		if err := parseFlowExpr(tc.in, &buf); err != nil {
+			t.Errorf("parseFlowExpr(%q): unexpected error: %v", tc.in, err)
+			continue
+		}
+		if got := buf.String(); got != tc.want {
+			t.Errorf("parseFlowExpr(%q): got %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestFlowDepthSingleQuoteEscape exercises the i++ branch in flowDepth for ”
+// (YAML single-quote escape). A bracket inside 'it”s}value' must not affect depth.
+func TestFlowDepthSingleQuoteEscape(t *testing.T) {
+	cases := []struct {
+		s    string
+		want int
+	}{
+		{`{key: 'it''s fine'}`, 0},
+		// bracket inside a '' escape — without i++, the } would close the outer {
+		{`{key: 'val''s}inner'}`, 0},
+		// unbalanced to verify non-zero result still works
+		{`{key: 'val''s fine'`, 1},
+		// double-quote \" escape: without i++, the " after \ closes the string early
+		// and the trailing } falls outside, miscounting depth
+		{"{\"\\\"\"}", 0},
+	}
+	for _, tc := range cases {
+		if got := flowDepth(tc.s); got != tc.want {
+			t.Errorf("flowDepth(%q): got %d, want %d", tc.s, got, tc.want)
+		}
 	}
 }
 
