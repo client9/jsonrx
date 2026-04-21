@@ -51,15 +51,6 @@ func BenchmarkFromYAML(b *testing.B) {
 	}
 }
 
-func BenchmarkFromYAMLOnly(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		if _, err := tojson.FromYAML([]byte(frontmatter1YAML)); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 func BenchmarkFromTOML(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
@@ -69,33 +60,6 @@ func BenchmarkFromTOML(b *testing.B) {
 		}
 		var m map[string]any
 		if err := json.Unmarshal(raw, &m); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkFromTOMLOnly(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		if _, err := tojson.FromTOML([]byte(frontmatter1TOML)); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkFromTOMLStreamOnly(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		if _, err := tojson.FromTOMLStreaming([]byte(frontmatter1TOML)); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkFromTOMLTreeOnly(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		if _, err := tojson.FromTOMLTree([]byte(frontmatter1TOML)); err != nil {
 			b.Fatal(err)
 		}
 	}

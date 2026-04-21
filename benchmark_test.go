@@ -10,6 +10,52 @@ import (
 	"testing"
 )
 
+func BenchmarkFromYAMLOnly(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := FromYAML([]byte(frontmatter1YAML)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+const frontmatter1TOML = `date = 2024-02-02T04:14:54-08:00
+draft = false
+genres = ['mystery', 'romance']
+tags = ['red', 'blue']
+title = 'Example'
+weight = 10
+[params]
+  author = 'John Smith'
+`
+
+func BenchmarkFromTOMLOnly(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := FromTOML([]byte(frontmatter1TOML)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFromTOMLStreamOnly(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := fromTOMLStreaming([]byte(frontmatter1TOML)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFromTOMLTreeOnly(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := fromTOMLTree([]byte(frontmatter1TOML)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkDecodeTokens(b *testing.B) {
 	data, err := os.ReadFile("samples/chromium/runtime_enabled_features.json5")
 	if err != nil {

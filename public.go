@@ -44,12 +44,12 @@ func FromTOMLAppend(dst *bytes.Buffer, src []byte) error {
 
 // FromTOMLStreaming converts TOML to JSON using the single-pass streaming path,
 // without falling back to the tree-based path on section re-entry.
-func FromTOMLStreaming(src []byte) ([]byte, error) {
+func fromTOMLStreaming(src []byte) ([]byte, error) {
 	return tomlConvertStreaming(string(src))
 }
 
 // FromTOMLTree converts TOML to JSON using the tree-based path directly,
 // skipping the streaming attempt.
-func FromTOMLTree(src []byte) ([]byte, error) {
+func fromTOMLTree(src []byte) ([]byte, error) {
 	return tomlConvertTree(string(src))
 }
