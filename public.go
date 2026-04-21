@@ -24,12 +24,12 @@ func FromJSON5Append(dst *bytes.Buffer, src []byte) error {
 // The output can be passed directly to encoding/json.Unmarshal using only json struct tags.
 // Anchors/aliases, tags, and complex keys are not supported.
 func FromYAML(src []byte) ([]byte, error) {
-	return yamlConvert(string(src))
+	return yamlConvert(src)
 }
 
 // FromYAMLAppend is the append variant of FromYAML; it writes the result into dst.
 func FromYAMLAppend(dst *bytes.Buffer, src []byte) error {
-	out, err := yamlConvert(string(src))
+	out, err := yamlConvert(src)
 	if err != nil {
 		return err
 	}
@@ -40,12 +40,12 @@ func FromYAMLAppend(dst *bytes.Buffer, src []byte) error {
 // FromTOML converts TOML to standard JSON.
 // The output can be passed directly to encoding/json.Unmarshal using only json struct tags.
 func FromTOML(src []byte) ([]byte, error) {
-	return tomlConvert(string(src))
+	return tomlConvert(src)
 }
 
 // FromTOMLAppend is the append variant of FromTOML; it writes the result into dst.
 func FromTOMLAppend(dst *bytes.Buffer, src []byte) error {
-	out, err := tomlConvert(string(src))
+	out, err := tomlConvert(src)
 	if err != nil {
 		return err
 	}
@@ -56,11 +56,11 @@ func FromTOMLAppend(dst *bytes.Buffer, src []byte) error {
 // fromTOMLStreaming converts TOML to JSON using the single-pass streaming path,
 // without falling back to the tree-based path on section re-entry.
 func fromTOMLStreaming(src []byte) ([]byte, error) {
-	return tomlConvertStreaming(string(src))
+	return tomlConvertStreaming(src)
 }
 
 // fromTOMLTree converts TOML to JSON using the tree-based path directly,
 // skipping the streaming attempt.
 func fromTOMLTree(src []byte) ([]byte, error) {
-	return tomlConvertTree(string(src))
+	return tomlConvertTree(src)
 }

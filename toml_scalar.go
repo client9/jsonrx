@@ -9,21 +9,20 @@ import (
 )
 
 // scalarStringNode encodes s as a JSON string and returns it as a scalar jnode.
-func scalarStringNode(s string) *jnode {
-	return &jnode{raw: appendStringStr(make([]byte, 0, len(s)+2), s)}
+func scalarStringNode(s []byte) *jnode {
+	return &jnode{raw: appendString(make([]byte, 0, len(s)+2), s)}
 }
 
 // parseTOMLValue parses a TOML value from s.
 // rawLines/lineIdx are needed for multiline strings.
 // Returns pre-encoded JSON bytes, number of additional lines consumed, and error.
-func parseTOMLValue(s string, rawLines []string, lineIdx int) (*jnode, int, error) {
-	s = strings.TrimSpace(s)
+func parseTOMLValue(s []byte, rawLines [][]byte, lineIdx int) (*jnode, int, error) {
+	s = bytes.TrimSpace(s)
 	if len(s) == 0 {
 		return nil, 0, fmt.Errorf("expected value")
 	}
 
-	// multiline basic string
-	if strings.HasPrefix(s, `"""`) {
+	if bytes.HasPrefix(s, []byte(`"""`)) {
 		str, consumed, err := parseTOMLMultilineBasic(s, rawLines, lineIdx)
 		if err != nil {
 			return nil, 0, err
@@ -31,7 +30,6 @@ func parseTOMLValue(s string, rawLines []string, lineIdx int) (*jnode, int, erro
 		return scalarStringNode(str), consumed, nil
 	}
 
-	// basic string
 	if s[0] == '"' {
 		str, _, err := parseTOMLBasicStringRaw(s)
 		if err != nil {
@@ -40,8 +38,7 @@ func parseTOMLValue(s string, rawLines []string, lineIdx int) (*jnode, int, erro
 		return scalarStringNode(str), 0, nil
 	}
 
-	// multiline literal string
-	if strings.HasPrefix(s, "'''") {
+	if bytes.HasPrefix(s, []byte("'''")) {
 		str, consumed, err := parseTOMLMultilineLiteral(s, rawLines, lineIdx)
 		if err != nil {
 			return nil, 0, err
@@ -49,13 +46,11 @@ func parseTOMLValue(s string, rawLines []string, lineIdx int) (*jnode, int, erro
 		return scalarStringNode(str), consumed, nil
 	}
 
-	// literal string
 	if s[0] == '\'' {
 		str, _ := parseTOMLLiteralStringRaw(s)
 		return scalarStringNode(str), 0, nil
 	}
 
-	// inline table
 	if s[0] == '{' {
 		node, _, err := parseTOMLInlineTable(s, 0)
 		if err != nil {
@@ -64,7 +59,6 @@ func parseTOMLValue(s string, rawLines []string, lineIdx int) (*jnode, int, erro
 		return node, 0, nil
 	}
 
-	// inline array
 	if s[0] == '[' {
 		node, _, consumed, err := parseTOMLInlineArray(s, rawLines, lineIdx, 0)
 		if err != nil {
@@ -73,28 +67,24 @@ func parseTOMLValue(s string, rawLines []string, lineIdx int) (*jnode, int, erro
 		return node, consumed, nil
 	}
 
-	// booleans (TOML: lowercase only)
-	if s == "true" {
+	if bytes.Equal(s, []byte("true")) {
 		return nodeTrue, 0, nil
 	}
-	if s == "false" {
+	if bytes.Equal(s, []byte("false")) {
 		return nodeFalse, 0, nil
 	}
 
-	// inf / nan
-	if strings.EqualFold(s, "inf") || strings.EqualFold(s, "+inf") || strings.EqualFold(s, "-inf") {
+	if bytes.EqualFold(s, []byte("inf")) || bytes.EqualFold(s, []byte("+inf")) || bytes.EqualFold(s, []byte("-inf")) {
 		return nil, 0, fmt.Errorf("inf is not representable in JSON")
 	}
-	if strings.EqualFold(s, "nan") || strings.EqualFold(s, "+nan") || strings.EqualFold(s, "-nan") {
+	if bytes.EqualFold(s, []byte("nan")) || bytes.EqualFold(s, []byte("+nan")) || bytes.EqualFold(s, []byte("-nan")) {
 		return nil, 0, fmt.Errorf("nan is not representable in JSON")
 	}
 
-	// datetime detection: YYYY-... or HH:MM
 	if isTOMLDateTime(s) {
 		return scalarStringNode(s), 0, nil
 	}
 
-	// number
 	raw, err := parseTOMLNumber(s)
 	if err != nil {
 		return nil, 0, err
@@ -109,7 +99,7 @@ func parseTOMLValue(s string, rawLines []string, lineIdx int) (*jnode, int, erro
 // applyTOMLEscape processes a TOML escape sequence. i points to the character
 // immediately after the backslash within s. The decoded rune is written to b.
 // Returns the number of additional characters consumed beyond s[i], or an error.
-func applyTOMLEscape(s string, i int, b *strings.Builder) (int, error) {
+func applyTOMLEscape(s []byte, i int, b *bytes.Buffer) (int, error) {
 	if i >= len(s) {
 		return 0, fmt.Errorf("unexpected end of string after backslash")
 	}
@@ -166,12 +156,12 @@ func applyTOMLEscape(s string, i int, b *strings.Builder) (int, error) {
 }
 
 // parseTOMLBasicStringRaw parses a TOML basic (double-quoted) string from s[0].
-// Returns the decoded string and the remainder after the closing quote.
-func parseTOMLBasicStringRaw(s string) (string, string, error) {
+// Returns the decoded bytes and the remainder after the closing quote.
+func parseTOMLBasicStringRaw(s []byte) ([]byte, []byte, error) {
 	if len(s) < 2 || s[0] != '"' {
-		return "", s, fmt.Errorf("expected double-quoted string")
+		return nil, s, fmt.Errorf("expected double-quoted string")
 	}
-	// Fast path: no escape sequences — return a no-alloc substring.
+	// Fast path: no escape sequences — return a no-alloc sub-slice.
 	for i := 1; i < len(s); i++ {
 		if s[i] == '"' {
 			return s[1:i], s[i+1:], nil
@@ -181,18 +171,18 @@ func parseTOMLBasicStringRaw(s string) (string, string, error) {
 		}
 	}
 	// Slow path: has escape sequences, must decode.
-	var b strings.Builder
+	var b bytes.Buffer
 	i := 1
 	for i < len(s) {
 		c := s[i]
 		if c == '"' {
-			return b.String(), s[i+1:], nil
+			return b.Bytes(), s[i+1:], nil
 		}
 		if c == '\\' && i+1 < len(s) {
 			i++
 			extra, err := applyTOMLEscape(s, i, &b)
 			if err != nil {
-				return "", s, err
+				return nil, s, err
 			}
 			i += extra
 		} else {
@@ -200,14 +190,14 @@ func parseTOMLBasicStringRaw(s string) (string, string, error) {
 		}
 		i++
 	}
-	return "", s, fmt.Errorf("unterminated basic string")
+	return nil, s, fmt.Errorf("unterminated basic string")
 }
 
 // parseTOMLLiteralStringRaw parses a TOML literal (single-quoted) string from s[0].
 // No escape processing. Returns the raw content and the remainder.
-func parseTOMLLiteralStringRaw(s string) (string, string) {
+func parseTOMLLiteralStringRaw(s []byte) ([]byte, []byte) {
 	if len(s) < 2 || s[0] != '\'' {
-		return s, ""
+		return s, nil
 	}
 	i := 1
 	for i < len(s) {
@@ -216,50 +206,47 @@ func parseTOMLLiteralStringRaw(s string) (string, string) {
 		}
 		i++
 	}
-	// unterminated — return what we have
-	return s[1:], ""
+	return s[1:], nil
 }
 
 // parseTOMLMultilineBasic parses a triple-double-quoted multiline basic string.
 // s is the portion of the current line starting at the opening """.
-// Returns the decoded string and the number of additional lines consumed.
-func parseTOMLMultilineBasic(s string, rawLines []string, lineIdx int) (string, int, error) {
-	if !strings.HasPrefix(s, `"""`) {
-		return "", 0, fmt.Errorf("expected \"\"\"")
+// Returns the decoded bytes and the number of additional lines consumed.
+func parseTOMLMultilineBasic(s []byte, rawLines [][]byte, lineIdx int) ([]byte, int, error) {
+	if !bytes.HasPrefix(s, []byte(`"""`)) {
+		return nil, 0, fmt.Errorf("expected \"\"\"")
 	}
-	// combine lines into one string for scanning
-	content := s[3:] // skip opening """
+	// Use 3-index slice to prevent appending into caller's buffer.
+	content := s[3:len(s):len(s)]
 	extraLines := 0
 	for {
-		if idx := strings.Index(content, `"""`); idx >= 0 {
+		if idx := bytes.Index(content, []byte(`"""`)); idx >= 0 {
 			body := content[:idx]
 			str, _, err := decodeTOMLMultilineBasic(body)
 			return str, extraLines, err
 		}
-		// need more lines
 		nextIdx := lineIdx + extraLines + 1
 		if nextIdx >= len(rawLines) {
-			return "", 0, fmt.Errorf("unterminated multiline basic string")
+			return nil, 0, fmt.Errorf("unterminated multiline basic string")
 		}
-		content += "\n" + rawLines[nextIdx]
+		content = append(content, '\n')
+		content = append(content, rawLines[nextIdx]...)
 		extraLines++
 	}
 }
 
-func decodeTOMLMultilineBasic(s string) (string, int, error) {
-	// trim a single leading newline per spec
-	if strings.HasPrefix(s, "\n") {
+func decodeTOMLMultilineBasic(s []byte) ([]byte, int, error) {
+	if bytes.HasPrefix(s, []byte("\n")) {
 		s = s[1:]
-	} else if strings.HasPrefix(s, "\r\n") {
+	} else if bytes.HasPrefix(s, []byte("\r\n")) {
 		s = s[2:]
 	}
-	var b strings.Builder
+	var b bytes.Buffer
 	i := 0
 	for i < len(s) {
 		c := s[i]
 		if c == '\\' && i+1 < len(s) {
 			next := s[i+1]
-			// line-ending backslash: trim following whitespace/newlines
 			if next == '\n' || next == '\r' || next == ' ' || next == '\t' {
 				i++
 				for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
@@ -267,10 +254,10 @@ func decodeTOMLMultilineBasic(s string) (string, int, error) {
 				}
 				continue
 			}
-			i++ // advance past backslash to escape char
+			i++
 			extra, err := applyTOMLEscape(s, i, &b)
 			if err != nil {
-				return "", 0, err
+				return nil, 0, err
 			}
 			i += extra
 		} else {
@@ -278,32 +265,32 @@ func decodeTOMLMultilineBasic(s string) (string, int, error) {
 		}
 		i++
 	}
-	return b.String(), 0, nil
+	return b.Bytes(), 0, nil
 }
 
 // parseTOMLMultilineLiteral parses a triple-single-quoted multiline literal string.
-func parseTOMLMultilineLiteral(s string, rawLines []string, lineIdx int) (string, int, error) {
-	if !strings.HasPrefix(s, "'''") {
-		return "", 0, fmt.Errorf("expected '''")
+func parseTOMLMultilineLiteral(s []byte, rawLines [][]byte, lineIdx int) ([]byte, int, error) {
+	if !bytes.HasPrefix(s, []byte("'''")) {
+		return nil, 0, fmt.Errorf("expected '''")
 	}
-	content := s[3:]
+	content := s[3:len(s):len(s)]
 	extraLines := 0
 	for {
-		if idx := strings.Index(content, "'''"); idx >= 0 {
+		if idx := bytes.Index(content, []byte("'''")); idx >= 0 {
 			body := content[:idx]
-			// trim single leading newline per spec
-			if strings.HasPrefix(body, "\n") {
+			if bytes.HasPrefix(body, []byte("\n")) {
 				body = body[1:]
-			} else if strings.HasPrefix(body, "\r\n") {
+			} else if bytes.HasPrefix(body, []byte("\r\n")) {
 				body = body[2:]
 			}
 			return body, extraLines, nil
 		}
 		nextIdx := lineIdx + extraLines + 1
 		if nextIdx >= len(rawLines) {
-			return "", 0, fmt.Errorf("unterminated multiline literal string")
+			return nil, 0, fmt.Errorf("unterminated multiline literal string")
 		}
-		content += "\n" + rawLines[nextIdx]
+		content = append(content, '\n')
+		content = append(content, rawLines[nextIdx]...)
 		extraLines++
 	}
 }
@@ -312,23 +299,24 @@ func parseTOMLMultilineLiteral(s string, rawLines []string, lineIdx int) (string
 // Number parser
 // --------------------------------------------------------------------------
 
-func parseTOMLNumber(s string) ([]byte, error) {
-	orig := s
+// parseTOMLNumber parses a TOML number. Internally works with strings because
+// all number parsing (strconv, underscore validation) requires string APIs.
+func parseTOMLNumber(s []byte) ([]byte, error) {
+	orig := string(s)
+	str := orig
 
-	// extract sign
 	sign := ""
-	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
-		sign = string(s[0])
-		s = s[1:]
+	if len(str) > 0 && (str[0] == '+' || str[0] == '-') {
+		sign = string(str[0])
+		str = str[1:]
 	}
-	if len(s) == 0 {
+	if len(str) == 0 {
 		return nil, fmt.Errorf("invalid number: %s", orig)
 	}
 
-	// radix prefixes (no sign allowed before 0x/0o/0b per TOML spec)
 	if sign == "" {
-		if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-			digits := stripUnderscores(s[2:], orig)
+		if strings.HasPrefix(str, "0x") || strings.HasPrefix(str, "0X") {
+			digits := stripUnderscores(str[2:], orig)
 			if digits == "" {
 				return nil, fmt.Errorf("invalid hex number: %s", orig)
 			}
@@ -338,16 +326,16 @@ func parseTOMLNumber(s string) ([]byte, error) {
 			}
 			return []byte(strconv.FormatInt(v, 10)), nil
 		}
-		if strings.HasPrefix(s, "0o") || strings.HasPrefix(s, "0O") {
-			digits := stripUnderscores(s[2:], orig)
+		if strings.HasPrefix(str, "0o") || strings.HasPrefix(str, "0O") {
+			digits := stripUnderscores(str[2:], orig)
 			v, err := strconv.ParseInt(digits, 8, 64)
 			if err != nil {
 				return nil, fmt.Errorf("invalid octal number %s: %v", orig, err)
 			}
 			return []byte(strconv.FormatInt(v, 10)), nil
 		}
-		if strings.HasPrefix(s, "0b") || strings.HasPrefix(s, "0B") {
-			digits := stripUnderscores(s[2:], orig)
+		if strings.HasPrefix(str, "0b") || strings.HasPrefix(str, "0B") {
+			digits := stripUnderscores(str[2:], orig)
 			v, err := strconv.ParseInt(digits, 2, 64)
 			if err != nil {
 				return nil, fmt.Errorf("invalid binary number %s: %v", orig, err)
@@ -356,36 +344,30 @@ func parseTOMLNumber(s string) ([]byte, error) {
 		}
 	}
 
-	// decimal integer or float — strip underscores
-	stripped, err := stripUnderscoresValidated(s)
+	stripped, err := stripUnderscoresValidated(str)
 	if err != nil {
 		return nil, fmt.Errorf("invalid number %s: %v", orig, err)
 	}
-	s = stripped
+	str = stripped
 
-	// check for leading zeros (not allowed except bare "0")
-	if len(s) > 1 && s[0] == '0' && s[1] >= '0' && s[1] <= '9' {
+	if len(str) > 1 && str[0] == '0' && str[1] >= '0' && str[1] <= '9' {
 		return nil, fmt.Errorf("leading zeros not allowed in integer: %s", orig)
 	}
 
-	isFloat := strings.ContainsAny(s, ".eE")
-	// JSON does not allow + prefix; strip it
+	isFloat := strings.ContainsAny(str, ".eE")
 	if sign == "+" {
 		sign = ""
 	}
-	result := sign + s
+	result := sign + str
 
 	if isFloat {
-		// validate by parsing
 		if _, err := strconv.ParseFloat(result, 64); err != nil {
 			return nil, fmt.Errorf("invalid float %s: %v", orig, err)
 		}
 		return []byte(result), nil
 	}
 
-	// integer: validate
 	if _, err := strconv.ParseInt(result, 10, 64); err != nil {
-		// try uint64 for large positive integers
 		if _, err2 := strconv.ParseUint(result, 10, 64); err2 != nil {
 			return nil, fmt.Errorf("invalid integer %s: %v", orig, err)
 		}
@@ -394,7 +376,7 @@ func parseTOMLNumber(s string) ([]byte, error) {
 }
 
 // stripUnderscores removes underscores without validation (for radix-prefixed numbers).
-func stripUnderscores(s, orig string) string {
+func stripUnderscores(s, _ string) string {
 	return strings.ReplaceAll(s, "_", "")
 }
 
@@ -431,19 +413,17 @@ func stripUnderscoresValidated(s string) (string, error) {
 // Datetime detection
 // --------------------------------------------------------------------------
 
-func isTOMLDateTime(s string) bool {
-	// local time: HH:MM:...
+func isTOMLDateTime(s []byte) bool {
 	if len(s) >= 5 && s[2] == ':' && isDigits(s[0:2]) {
 		return true
 	}
-	// date / datetime: YYYY-...
 	if len(s) >= 10 && s[4] == '-' && isDigits(s[0:4]) {
 		return true
 	}
 	return false
 }
 
-func isDigits(s string) bool {
+func isDigits(s []byte) bool {
 	for _, c := range s {
 		if c < '0' || c > '9' {
 			return false
@@ -458,7 +438,7 @@ func isDigits(s string) bool {
 
 // parseTOMLInlineTable parses {k = v, ...} starting at s[pos].
 // Returns the built jnode, position after the closing '}', and any error.
-func parseTOMLInlineTable(s string, pos int) (*jnode, int, error) {
+func parseTOMLInlineTable(s []byte, pos int) (*jnode, int, error) {
 	if pos >= len(s) || s[pos] != '{' {
 		return nil, pos, fmt.Errorf("expected '{'")
 	}
@@ -477,7 +457,6 @@ func parseTOMLInlineTable(s string, pos int) (*jnode, int, error) {
 				return nil, pos, fmt.Errorf("expected ',' or '}' in inline table")
 			}
 			pos = flowSkipWS(s, pos+1)
-			// no trailing comma in TOML inline tables
 			if pos < len(s) && s[pos] == '}' {
 				return nil, pos, fmt.Errorf("trailing comma not allowed in inline table")
 			}
@@ -501,7 +480,6 @@ func parseTOMLInlineTable(s string, pos int) (*jnode, int, error) {
 		}
 		pos = flowSkipWS(s, newPos)
 
-		// navigate dotted path
 		target := node
 		for i := 0; i < len(path)-1; i++ {
 			pair := target.findPair(path[i])
@@ -529,7 +507,7 @@ func parseTOMLInlineTable(s string, pos int) (*jnode, int, error) {
 }
 
 // parseTOMLInlineValue parses a single value inside an inline collection (no multiline).
-func parseTOMLInlineValue(s string, pos int) (*jnode, int, error) {
+func parseTOMLInlineValue(s []byte, pos int) (*jnode, int, error) {
 	pos = flowSkipWS(s, pos)
 	if pos >= len(s) {
 		return nil, pos, fmt.Errorf("expected value")
@@ -544,17 +522,16 @@ func parseTOMLInlineValue(s string, pos int) (*jnode, int, error) {
 }
 
 // tomlValueEnd returns the number of bytes in s consumed by the first TOML value.
-// Used after parseTOMLValue to advance the position cursor.
-func tomlValueEnd(s string) int {
-	s = strings.TrimLeft(s, " \t")
+func tomlValueEnd(s []byte) int {
+	s = bytes.TrimLeft(s, " \t")
 	if len(s) == 0 {
 		return 0
 	}
 	switch {
-	case strings.HasPrefix(s, `"""`):
+	case bytes.HasPrefix(s, []byte(`"""`)):
 		i := 3
 		for i < len(s) {
-			if strings.HasPrefix(s[i:], `"""`) {
+			if bytes.HasPrefix(s[i:], []byte(`"""`)) {
 				return i + 3
 			}
 			if s[i] == '\\' {
@@ -576,10 +553,10 @@ func tomlValueEnd(s string) int {
 			}
 		}
 		return len(s)
-	case strings.HasPrefix(s, "'''"):
+	case bytes.HasPrefix(s, []byte("'''")):
 		i := 3
 		for i < len(s) {
-			if strings.HasPrefix(s[i:], "'''") {
+			if bytes.HasPrefix(s[i:], []byte("'''")) {
 				return i + 3
 			}
 			i++
@@ -655,7 +632,6 @@ func tomlValueEnd(s string) int {
 		}
 		return len(s)
 	default:
-		// bare value: ends at , } ] whitespace or end
 		for i := 0; i < len(s); i++ {
 			c := s[i]
 			if c == ',' || c == '}' || c == ']' || c == ' ' || c == '\t' || c == '\r' || c == '\n' {
@@ -670,16 +646,15 @@ func tomlValueEnd(s string) int {
 // Direct-write value helpers (streaming path — no jnode allocation)
 // --------------------------------------------------------------------------
 
-// writeTOMLValue writes the JSON representation of a TOML value directly to buf
-// without allocating an intermediate jnode.
+// writeTOMLValue writes the JSON representation of a TOML value directly to buf.
 // Returns extra lines consumed (for multiline strings) and any error.
-func writeTOMLValue(s string, rawLines []string, lineIdx int, buf *bytes.Buffer) (int, error) {
-	s = strings.TrimSpace(s)
+func writeTOMLValue(s []byte, rawLines [][]byte, lineIdx int, buf *bytes.Buffer) (int, error) {
+	s = bytes.TrimSpace(s)
 	if len(s) == 0 {
 		return 0, fmt.Errorf("expected value")
 	}
 
-	if strings.HasPrefix(s, `"""`) {
+	if bytes.HasPrefix(s, []byte(`"""`)) {
 		str, consumed, err := parseTOMLMultilineBasic(s, rawLines, lineIdx)
 		if err != nil {
 			return 0, err
@@ -695,7 +670,7 @@ func writeTOMLValue(s string, rawLines []string, lineIdx int, buf *bytes.Buffer)
 		writeJSONString(str, buf)
 		return 0, nil
 	}
-	if strings.HasPrefix(s, "'''") {
+	if bytes.HasPrefix(s, []byte("'''")) {
 		str, consumed, err := parseTOMLMultilineLiteral(s, rawLines, lineIdx)
 		if err != nil {
 			return 0, err
@@ -719,18 +694,18 @@ func writeTOMLValue(s string, rawLines []string, lineIdx int, buf *bytes.Buffer)
 	if s[0] == '[' {
 		return writeTOMLInlineArray(s, rawLines, lineIdx, buf)
 	}
-	if s == "true" {
+	if bytes.Equal(s, []byte("true")) {
 		buf.WriteString("true")
 		return 0, nil
 	}
-	if s == "false" {
+	if bytes.Equal(s, []byte("false")) {
 		buf.WriteString("false")
 		return 0, nil
 	}
-	if strings.EqualFold(s, "inf") || strings.EqualFold(s, "+inf") || strings.EqualFold(s, "-inf") {
+	if bytes.EqualFold(s, []byte("inf")) || bytes.EqualFold(s, []byte("+inf")) || bytes.EqualFold(s, []byte("-inf")) {
 		return 0, fmt.Errorf("inf is not representable in JSON")
 	}
-	if strings.EqualFold(s, "nan") || strings.EqualFold(s, "+nan") || strings.EqualFold(s, "-nan") {
+	if bytes.EqualFold(s, []byte("nan")) || bytes.EqualFold(s, []byte("+nan")) || bytes.EqualFold(s, []byte("-nan")) {
 		return 0, fmt.Errorf("nan is not representable in JSON")
 	}
 	if isTOMLDateTime(s) {
@@ -744,7 +719,7 @@ func writeTOMLValue(s string, rawLines []string, lineIdx int, buf *bytes.Buffer)
 			digits = digits[1:]
 		}
 		if len(digits) < 2 || digits[0] != '0' || digits[1] < '0' || digits[1] > '9' {
-			buf.WriteString(s)
+			buf.Write(s)
 			return 0, nil
 		}
 	}
@@ -753,11 +728,10 @@ func writeTOMLValue(s string, rawLines []string, lineIdx int, buf *bytes.Buffer)
 		s2 := s[1:]
 		digits := s2
 		if len(digits) < 2 || digits[0] != '0' || digits[1] < '0' || digits[1] > '9' {
-			buf.WriteString(s2)
+			buf.Write(s2)
 			return 0, nil
 		}
 	}
-	// full parse (handles underscores, radix prefixes, leading-zero errors)
 	raw, err := parseTOMLNumber(s)
 	if err != nil {
 		return 0, err
@@ -766,9 +740,10 @@ func writeTOMLValue(s string, rawLines []string, lineIdx int, buf *bytes.Buffer)
 	return 0, nil
 }
 
-// writeTOMLInlineArray writes [v, v, ...] starting at s[0] directly to buf,
-// mirroring parseTOMLInlineArray without building a jnode tree.
-func writeTOMLInlineArray(s string, rawLines []string, lineIdx int, buf *bytes.Buffer) (int, error) {
+// writeTOMLInlineArray writes [v, v, ...] starting at s[0] directly to buf.
+func writeTOMLInlineArray(s []byte, rawLines [][]byte, lineIdx int, buf *bytes.Buffer) (int, error) {
+	// 3-index slice prevents appending into caller's buffer.
+	s = s[:len(s):len(s)]
 	pos := 1 // consume '['
 	extraLines := 0
 	buf.WriteByte('[')
@@ -784,7 +759,8 @@ func writeTOMLInlineArray(s string, rawLines []string, lineIdx int, buf *bytes.B
 			if rawLines == nil || nextIdx >= len(rawLines) {
 				return extraLines, fmt.Errorf("unterminated inline array")
 			}
-			s += "\n" + rawLines[nextIdx]
+			s = append(s, '\n')
+			s = append(s, rawLines[nextIdx]...)
 			extraLines++
 		}
 
@@ -807,7 +783,8 @@ func writeTOMLInlineArray(s string, rawLines []string, lineIdx int, buf *bytes.B
 				if rawLines == nil || nextIdx >= len(rawLines) {
 					return extraLines, fmt.Errorf("unterminated inline array")
 				}
-				s += "\n" + rawLines[nextIdx]
+				s = append(s, '\n')
+				s = append(s, rawLines[nextIdx]...)
 				extraLines++
 			}
 			if s[pos] == ']' {
@@ -817,7 +794,7 @@ func writeTOMLInlineArray(s string, rawLines []string, lineIdx int, buf *bytes.B
 			buf.WriteByte(',')
 		}
 
-		rest := strings.TrimLeft(s[pos:], " \t")
+		rest := bytes.TrimLeft(s[pos:], " \t")
 		lead := len(s[pos:]) - len(rest)
 		valEnd := tomlValueEnd(rest)
 		consumed, err := writeTOMLValue(rest[:valEnd], rawLines, lineIdx+extraLines, buf)
@@ -835,29 +812,28 @@ func writeTOMLInlineArray(s string, rawLines []string, lineIdx int, buf *bytes.B
 // --------------------------------------------------------------------------
 
 // parseTOMLInlineArray parses [v, v, ...] starting at s[pos].
-// May span multiple lines. Returns the built jnode, position after ']',
-// lines consumed beyond lineIdx, and any error.
-func parseTOMLInlineArray(s string, rawLines []string, lineIdx int, pos int) (*jnode, int, int, error) {
+func parseTOMLInlineArray(s []byte, rawLines [][]byte, lineIdx int, pos int) (*jnode, int, int, error) {
 	if pos >= len(s) || s[pos] != '[' {
 		return nil, pos, 0, fmt.Errorf("expected '['")
 	}
+	// 3-index slice prevents appending into caller's buffer.
+	s = s[:len(s):len(s)]
 	pos++ // consume '['
 	extraLines := 0
 	node := &jnode{arr: []*jnode{}}
 
 	for {
-		// skip whitespace and newlines, pulling in more rawLines as needed
 		for {
 			pos = flowSkipWS(s, pos)
 			if pos < len(s) {
 				break
 			}
-			// pull next line
 			nextIdx := lineIdx + extraLines + 1
 			if rawLines == nil || nextIdx >= len(rawLines) {
 				return nil, pos, extraLines, fmt.Errorf("unterminated inline array")
 			}
-			s += "\n" + rawLines[nextIdx]
+			s = append(s, '\n')
+			s = append(s, rawLines[nextIdx]...)
 			extraLines++
 		}
 
@@ -870,7 +846,6 @@ func parseTOMLInlineArray(s string, rawLines []string, lineIdx int, pos int) (*j
 				return nil, pos, extraLines, fmt.Errorf("expected ',' or ']' in array")
 			}
 			pos = flowSkipWS(s, pos+1)
-			// skip whitespace/newlines after comma
 			for {
 				pos = flowSkipWS(s, pos)
 				if pos < len(s) {
@@ -880,16 +855,16 @@ func parseTOMLInlineArray(s string, rawLines []string, lineIdx int, pos int) (*j
 				if rawLines == nil || nextIdx >= len(rawLines) {
 					return nil, pos, extraLines, fmt.Errorf("unterminated inline array")
 				}
-				s += "\n" + rawLines[nextIdx]
+				s = append(s, '\n')
+				s = append(s, rawLines[nextIdx]...)
 				extraLines++
 			}
-			// trailing comma allowed
 			if s[pos] == ']' {
 				return node, pos + 1, extraLines, nil
 			}
 		}
 
-		rest := strings.TrimLeft(s[pos:], " \t")
+		rest := bytes.TrimLeft(s[pos:], " \t")
 		lead := len(s[pos:]) - len(rest)
 		valEnd := tomlValueEnd(rest)
 		valNode, consumed, err := parseTOMLValue(rest[:valEnd], rawLines, lineIdx+extraLines)

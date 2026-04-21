@@ -361,7 +361,7 @@ func TestYAMLControlCharEncoding(t *testing.T) {
 }
 
 func TestYAMLIsNumberSigns(t *testing.T) {
-	if !isYAMLNumber("+42") {
+	if !isYAMLNumber([]byte("+42")) {
 		t.Error("isYAMLNumber(+42) should be true")
 	}
 	roundtripYAML(t, `1.5e+10`, `1.5e+10`)
@@ -505,7 +505,7 @@ func TestParseFlowExprDirect(t *testing.T) {
 	}
 	for _, tc := range cases {
 		var buf bytes.Buffer
-		if err := parseFlowExpr(tc.in, &buf); err != nil {
+		if err := parseFlowExpr([]byte(tc.in), &buf); err != nil {
 			t.Errorf("parseFlowExpr(%q): unexpected error: %v", tc.in, err)
 			continue
 		}
@@ -532,7 +532,7 @@ func TestFlowDepthSingleQuoteEscape(t *testing.T) {
 		{"{\"\\\"\"}", 0},
 	}
 	for _, tc := range cases {
-		if got := flowDepth(tc.s); got != tc.want {
+		if got := flowDepth([]byte(tc.s)); got != tc.want {
 			t.Errorf("flowDepth(%q): got %d, want %d", tc.s, got, tc.want)
 		}
 	}

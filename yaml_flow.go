@@ -3,18 +3,17 @@ package tojson
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
 // isFlowValue reports whether s begins with a flow mapping or sequence.
-func isFlowValue(s string) bool {
-	s = strings.TrimSpace(s)
+func isFlowValue(s []byte) bool {
+	s = bytes.TrimSpace(s)
 	return len(s) > 0 && (s[0] == '{' || s[0] == '[')
 }
 
 // flowDepth returns the net count of open flow delimiters minus closed ones,
 // ignoring content inside quoted strings.
-func flowDepth(s string) int {
+func flowDepth(s []byte) int {
 	depth := 0
 	inDouble, inSingle := false, false
 	for i := 0; i < len(s); i++ {
@@ -45,12 +44,12 @@ func flowDepth(s string) int {
 	return depth
 }
 
-// gatherFlowSrc builds a complete flow expression string starting with first.
+// gatherFlowSrc builds a complete flow expression starting with first.
 // If brackets are unbalanced it reads additional rawLines to support multi-line
-// flow values. Returns the assembled string and the last rawLine index consumed.
-func (p *parser) gatherFlowSrc(first string, rawLineIdx int) (string, int) {
-	var sb strings.Builder
-	sb.WriteString(first)
+// flow values. Returns the assembled bytes and the last rawLine index consumed.
+func (p *parser) gatherFlowSrc(first []byte, rawLineIdx int) ([]byte, int) {
+	var sb bytes.Buffer
+	sb.Write(first)
 	depth := flowDepth(first)
 	last := rawLineIdx
 	for depth > 0 {
@@ -58,23 +57,23 @@ func (p *parser) gatherFlowSrc(first string, rawLineIdx int) (string, int) {
 		if rawLineIdx >= len(p.rawLines) {
 			break
 		}
-		line := strings.TrimRight(p.rawLines[rawLineIdx], " \t\r")
-		line = stripInlineComment(strings.TrimSpace(line))
-		if line == "" {
+		line := bytes.TrimRight(p.rawLines[rawLineIdx], " \t\r")
+		line = stripInlineComment(bytes.TrimSpace(line))
+		if len(line) == 0 {
 			continue
 		}
 		sb.WriteByte(' ')
-		sb.WriteString(line)
+		sb.Write(line)
 		depth += flowDepth(line)
 		last = rawLineIdx
 	}
-	return sb.String(), last
+	return sb.Bytes(), last
 }
 
 // parseFlowExpr parses a complete YAML flow expression (mapping, sequence, or
 // scalar) from s and writes its JSON representation to buf.
-func parseFlowExpr(s string, buf *bytes.Buffer) error {
-	s = strings.TrimSpace(s)
+func parseFlowExpr(s []byte, buf *bytes.Buffer) error {
+	s = bytes.TrimSpace(s)
 	switch {
 	case len(s) == 0:
 		buf.WriteString("null")
@@ -91,7 +90,7 @@ func parseFlowExpr(s string, buf *bytes.Buffer) error {
 }
 
 // parseFlowMapping parses a flow mapping starting at s[pos] (which must be '{').
-func parseFlowMapping(s string, pos int, buf *bytes.Buffer) (int, error) {
+func parseFlowMapping(s []byte, pos int, buf *bytes.Buffer) (int, error) {
 	pos++ // consume '{'
 	buf.WriteByte('{')
 	pos = flowSkipWS(s, pos)
@@ -135,7 +134,7 @@ func parseFlowMapping(s string, pos int, buf *bytes.Buffer) (int, error) {
 }
 
 // parseFlowSequence parses a flow sequence starting at s[pos] (which must be '[').
-func parseFlowSequence(s string, pos int, buf *bytes.Buffer) (int, error) {
+func parseFlowSequence(s []byte, pos int, buf *bytes.Buffer) (int, error) {
 	pos++ // consume '['
 	buf.WriteByte('[')
 	pos = flowSkipWS(s, pos)
@@ -169,7 +168,7 @@ func parseFlowSequence(s string, pos int, buf *bytes.Buffer) (int, error) {
 }
 
 // flowParseItem parses a single flow value (mapping, sequence, or scalar).
-func flowParseItem(s string, pos int, buf *bytes.Buffer) (int, error) {
+func flowParseItem(s []byte, pos int, buf *bytes.Buffer) (int, error) {
 	pos = flowSkipWS(s, pos)
 	if pos >= len(s) {
 		buf.WriteString("null")
@@ -196,12 +195,12 @@ func flowParseItem(s string, pos int, buf *bytes.Buffer) (int, error) {
 		for pos < len(s) && s[pos] != ',' && s[pos] != '}' && s[pos] != ']' {
 			pos++
 		}
-		return pos, writeScalar(strings.TrimSpace(s[start:pos]), buf)
+		return pos, writeScalar(bytes.TrimSpace(s[start:pos]), buf)
 	}
 }
 
 // flowParseKey reads a mapping key (bare, double-quoted, or single-quoted).
-func flowParseKey(s string, pos int) (string, int, error) {
+func flowParseKey(s []byte, pos int) ([]byte, int, error) {
 	switch {
 	case pos < len(s) && s[pos] == '"':
 		str, newPos, err := flowParseDoubleQuoted(s, pos)
@@ -218,24 +217,24 @@ func flowParseKey(s string, pos int) (string, int, error) {
 			}
 			pos++
 		}
-		return strings.TrimSpace(s[start:pos]), pos, nil
+		return bytes.TrimSpace(s[start:pos]), pos, nil
 	}
 }
 
 // flowParseDoubleQuoted reads a double-quoted string starting at s[pos].
-func flowParseDoubleQuoted(s string, pos int) (string, int, error) {
+func flowParseDoubleQuoted(s []byte, pos int) ([]byte, int, error) {
 	str, end, err := parseDoubleQuoted(s[pos:])
 	return str, pos + end, err
 }
 
 // flowParseSingleQuoted reads a single-quoted string starting at s[pos].
-func flowParseSingleQuoted(s string, pos int) (string, int) {
+func flowParseSingleQuoted(s []byte, pos int) ([]byte, int) {
 	str, rest := parseSingleQuotedRaw(s[pos:])
 	return str, len(s) - len(rest)
 }
 
 // flowSkipWS advances pos past spaces, tabs, and newlines.
-func flowSkipWS(s string, pos int) int {
+func flowSkipWS(s []byte, pos int) int {
 	for pos < len(s) {
 		c := s[pos]
 		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {

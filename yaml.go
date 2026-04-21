@@ -9,12 +9,9 @@
 
 package tojson
 
-import (
-	"bytes"
-	"strings"
-)
+import "bytes"
 
-func yamlConvert(input string) ([]byte, error) {
+func yamlConvert(input []byte) ([]byte, error) {
 	p := newParser(input)
 	if len(p.lines) == 0 {
 		return []byte("null"), nil
@@ -33,40 +30,40 @@ func yamlConvert(input string) ([]byte, error) {
 type parser struct {
 	lines    []pline
 	pos      int
-	rawLines []string // original input lines (split on \n, \r stripped)
+	rawLines [][]byte // original input lines (split on \n, \r stripped)
 	rawIdx   []int    // rawIdx[i] = index into rawLines for lines[i]
 }
 
 type pline struct {
 	indent  int
-	content string // leading whitespace stripped, trailing whitespace stripped
+	content []byte // leading whitespace stripped, trailing whitespace stripped
 }
 
-func newParser(input string) *parser {
-	rawLines := strings.Split(input, "\n")
-	// strings.Split on a \n-terminated string adds a spurious trailing empty
+func newParser(input []byte) *parser {
+	rawLines := bytes.Split(input, []byte{'\n'})
+	// bytes.Split on a \n-terminated input adds a spurious trailing empty
 	// element; remove it so it isn't mistaken for a blank line in block scalars.
-	if len(rawLines) > 0 && rawLines[len(rawLines)-1] == "" {
+	if len(rawLines) > 0 && len(rawLines[len(rawLines)-1]) == 0 {
 		rawLines = rawLines[:len(rawLines)-1]
 	}
 	var lines []pline
 	var rawIdx []int
 	for i, raw := range rawLines {
-		s := strings.TrimRight(raw, " \t\r")
-		if s == "" {
+		s := bytes.TrimRight(raw, " \t\r")
+		if len(s) == 0 {
 			continue
 		}
-		trimmed := strings.TrimSpace(s)
+		trimmed := bytes.TrimSpace(s)
 		// skip blank, comment-only, and YAML document-marker lines
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") ||
-			trimmed == "---" || trimmed == "..." {
+		if len(trimmed) == 0 || trimmed[0] == '#' ||
+			bytes.Equal(trimmed, []byte("---")) || bytes.Equal(trimmed, []byte("...")) {
 			continue
 		}
 		indent := leadingSpaces(s)
 		content := s[indent:]
 		// strip inline comment (outside quotes) — best-effort
 		content = stripInlineComment(content)
-		if content == "" {
+		if len(content) == 0 {
 			continue
 		}
 		lines = append(lines, pline{indent: indent, content: content})
@@ -157,7 +154,7 @@ func (p *parser) parseMapping(indent int, buf *bytes.Buffer) error {
 		writeJSONString(key, buf)
 		buf.WriteByte(':')
 
-		if rest == "" {
+		if len(rest) == 0 {
 			if err := p.parseBlock(indent, buf); err != nil {
 				return err
 			}
@@ -197,13 +194,13 @@ func (p *parser) parseSequence(indent int, buf *bytes.Buffer) error {
 		p.consume()
 		rawLine := p.rawIdx[p.pos-1]
 
-		rest := strings.TrimPrefix(l.content, "-")
+		rest := bytes.TrimPrefix(l.content, []byte("-"))
 		if len(rest) > 0 && rest[0] == ' ' {
 			rest = rest[1:]
 		}
-		rest = strings.TrimSpace(rest)
+		rest = bytes.TrimSpace(rest)
 
-		if rest == "" {
+		if len(rest) == 0 {
 			if err := p.parseBlock(indent, buf); err != nil {
 				return err
 			}
@@ -238,14 +235,14 @@ func (p *parser) parseSequence(indent int, buf *bytes.Buffer) error {
 //
 //   - name: Alice
 //     age: 30
-func (p *parser) parseInlineMap(firstLine string, virtIndent int, startRawLine int, buf *bytes.Buffer) error {
+func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine int, buf *bytes.Buffer) error {
 	buf.WriteByte('{')
 
-	writeKeyValue := func(line string, rawLine int) error {
+	writeKeyValue := func(line []byte, rawLine int) error {
 		key, rest := splitMapKey(line)
 		writeJSONString(key, buf)
 		buf.WriteByte(':')
-		if rest == "" {
+		if len(rest) == 0 {
 			if err := p.parseBlock(virtIndent-1, buf); err != nil {
 				return err
 			}
@@ -290,8 +287,8 @@ func (p *parser) parseInlineMap(firstLine string, virtIndent int, startRawLine i
 
 // detectBlockScalar returns the style ('|' or '>'), chomping ('-' strip,
 // '+' keep, 0 clip/default), and ok=true if s is a block scalar indicator.
-func detectBlockScalar(s string) (style, chomping byte, ok bool) {
-	s = strings.TrimSpace(s)
+func detectBlockScalar(s []byte) (style, chomping byte, ok bool) {
+	s = bytes.TrimSpace(s)
 	if len(s) == 0 || (s[0] != '|' && s[0] != '>') {
 		return 0, 0, false
 	}
@@ -313,16 +310,16 @@ func detectBlockScalar(s string) (style, chomping byte, ok bool) {
 
 // collectBlockScalar reads raw lines following rawLineIdx to build a literal
 // (style='|') or folded (style='>') scalar.
-func (p *parser) collectBlockScalar(style, chomping byte, rawLineIdx, keyIndent int) (string, int) {
+func (p *parser) collectBlockScalar(style, chomping byte, rawLineIdx, keyIndent int) ([]byte, int) {
 	blockIndent := -1
-	var contentLines []string
+	var contentLines [][]byte
 	lastIdx := rawLineIdx
 
 	for i := rawLineIdx + 1; i < len(p.rawLines); i++ {
-		raw := strings.TrimRight(p.rawLines[i], " \t\r")
-		if strings.TrimSpace(raw) == "" {
+		raw := bytes.TrimRight(p.rawLines[i], " \t\r")
+		if len(bytes.TrimSpace(raw)) == 0 {
 			if blockIndent >= 0 {
-				contentLines = append(contentLines, "")
+				contentLines = append(contentLines, nil)
 				lastIdx = i
 			}
 			continue
@@ -341,35 +338,35 @@ func (p *parser) collectBlockScalar(style, chomping byte, rawLineIdx, keyIndent 
 		lastIdx = i
 	}
 
-	var result string
+	var result []byte
 	if style == '|' {
-		result = strings.Join(contentLines, "\n")
+		result = bytes.Join(contentLines, []byte{'\n'})
 	} else {
-		var sb strings.Builder
+		var sb bytes.Buffer
 		for i, line := range contentLines {
-			if line == "" {
+			if len(line) == 0 {
 				sb.WriteByte('\n')
 			} else {
-				if i > 0 && contentLines[i-1] != "" {
+				if i > 0 && len(contentLines[i-1]) != 0 {
 					sb.WriteByte(' ')
 				}
-				sb.WriteString(line)
+				sb.Write(line)
 			}
 		}
-		result = sb.String()
+		result = sb.Bytes()
 	}
 
 	switch chomping {
 	case '-':
-		result = strings.TrimRight(result, "\n")
+		result = bytes.TrimRight(result, "\n")
 	case '+':
 		if len(contentLines) > 0 {
-			result += "\n"
+			result = append(result, '\n')
 		}
 	default:
-		result = strings.TrimRight(result, "\n")
+		result = bytes.TrimRight(result, "\n")
 		if len(contentLines) > 0 {
-			result += "\n"
+			result = append(result, '\n')
 		}
 	}
 

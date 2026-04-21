@@ -209,68 +209,6 @@ func appendString(dst []byte, src []byte) []byte {
 	return dst
 }
 
-// appendStringStr is identical to appendString but accepts a string source,
-// avoiding the []byte(s) copy that would otherwise be required at every call site
-// in the YAML and TOML paths.
-func appendStringStr(dst []byte, src string) []byte {
-	dst = append(dst, '"')
-	start := 0
-	for i := 0; i < len(src); {
-		if b := src[i]; b < utf8.RuneSelf {
-			if safeSet[b] {
-				i++
-				continue
-			}
-			dst = append(dst, src[start:i]...)
-			switch b {
-			case '\\', '"':
-				dst = append(dst, '\\', b)
-			case '\b':
-				dst = append(dst, '\\', 'b')
-			case '\f':
-				dst = append(dst, '\\', 'f')
-			case '\n':
-				dst = append(dst, '\\', 'n')
-			case '\r':
-				if i+1 < len(src) && src[i+1] == '\n' {
-					break
-				}
-				dst = append(dst, '\\', 'r')
-			case '\t':
-				dst = append(dst, '\\', 't')
-			default:
-				dst = append(dst, '\\', 'u', '0', '0', hex[b>>4], hex[b&0xF])
-			}
-			i++
-			start = i
-			continue
-		}
-		n := len(src) - i
-		if n > utf8.UTFMax {
-			n = utf8.UTFMax
-		}
-		c, size := utf8.DecodeRuneInString(src[i : i+n])
-		if c == utf8.RuneError && size == 1 {
-			dst = append(dst, src[start:i]...)
-			dst = append(dst, `\ufffd`...)
-			i += size
-			start = i
-			continue
-		}
-		if c == '\u2028' || c == '\u2029' {
-			dst = append(dst, src[start:i]...)
-			dst = append(dst, '\\', 'u', '2', '0', '2', hex[c&0xF])
-			i += size
-			start = i
-			continue
-		}
-		i += size
-	}
-	dst = append(dst, src[start:]...)
-	dst = append(dst, '"')
-	return dst
-}
-
 func appendRecodeString(dst []byte, src []byte) []byte {
 	dst = append(dst, '"')
 	start := 0

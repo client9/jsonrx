@@ -3,13 +3,12 @@ package tojson
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
-// writeScalar converts a YAML scalar string to its JSON representation.
-func writeScalar(s string, buf *bytes.Buffer) error {
-	s = strings.TrimSpace(s)
-	switch s {
+// writeScalar converts a YAML scalar to its JSON representation.
+func writeScalar(s []byte, buf *bytes.Buffer) error {
+	s = bytes.TrimSpace(s)
+	switch string(s) {
 	case "", "null", "~", "Null", "NULL":
 		buf.WriteString("null")
 		return nil
@@ -36,7 +35,7 @@ func writeScalar(s string, buf *bytes.Buffer) error {
 	}
 
 	if isYAMLNumber(s) {
-		buf.WriteString(s)
+		buf.Write(s)
 		return nil
 	}
 
@@ -46,15 +45,15 @@ func writeScalar(s string, buf *bytes.Buffer) error {
 
 // writeJSONString writes s as a properly escaped JSON string.
 // Uses AvailableBuffer so that when buf has spare capacity no allocation is needed.
-func writeJSONString(s string, buf *bytes.Buffer) {
-	buf.Write(appendStringStr(buf.AvailableBuffer(), s))
+func writeJSONString(s []byte, buf *bytes.Buffer) {
+	buf.Write(appendString(buf.AvailableBuffer(), s))
 }
 
 // --------------------------------------------------------------------------
 // Quoted string parsers
 // --------------------------------------------------------------------------
 
-func parseUnicodeEscape(hex4 string) (rune, error) {
+func parseUnicodeEscape(hex4 []byte) (rune, error) {
 	var r rune
 	for _, c := range hex4 {
 		r <<= 4
@@ -74,11 +73,11 @@ func parseUnicodeEscape(hex4 string) (rune, error) {
 
 // parseDoubleQuoted parses a double-quoted YAML string starting at s[0].
 // Returns the unescaped content, the index after the closing '"', and any error.
-func parseDoubleQuoted(s string) (string, int, error) {
+func parseDoubleQuoted(s []byte) ([]byte, int, error) {
 	if len(s) < 2 || s[0] != '"' {
 		return s, len(s), nil
 	}
-	// Fast path: no escape sequences — return a no-alloc substring.
+	// Fast path: no escape sequences — return a no-alloc sub-slice.
 	for i := 1; i < len(s); i++ {
 		if s[i] == '"' {
 			return s[1:i], i + 1, nil
@@ -88,12 +87,12 @@ func parseDoubleQuoted(s string) (string, int, error) {
 		}
 	}
 	// Slow path: has escape sequences, must decode.
-	var b strings.Builder
+	var b bytes.Buffer
 	i := 1
 	for i < len(s) {
 		c := s[i]
 		if c == '"' {
-			return b.String(), i + 1, nil
+			return b.Bytes(), i + 1, nil
 		}
 		if c == '\\' && i+1 < len(s) {
 			i++
@@ -140,10 +139,10 @@ func parseDoubleQuoted(s string) (string, int, error) {
 		}
 		i++
 	}
-	return b.String(), i, fmt.Errorf("unterminated double-quoted string")
+	return b.Bytes(), i, fmt.Errorf("unterminated double-quoted string")
 }
 
-func parseSingleQuoted(s string) string {
+func parseSingleQuoted(s []byte) []byte {
 	str, _ := parseSingleQuotedRaw(s)
 	return str
 }
@@ -152,12 +151,12 @@ func parseSingleQuoted(s string) string {
 // Line classification helpers
 // --------------------------------------------------------------------------
 
-func isSeqItem(content string) bool {
-	return content == "-" || strings.HasPrefix(content, "- ")
+func isSeqItem(content []byte) bool {
+	return bytes.Equal(content, []byte("-")) || bytes.HasPrefix(content, []byte("- "))
 }
 
 // isMapKey returns true if content looks like a YAML mapping key line.
-func isMapKey(content string) bool {
+func isMapKey(content []byte) bool {
 	if isSeqItem(content) {
 		return false
 	}
@@ -194,44 +193,44 @@ func isMapKey(content string) bool {
 		}
 		return false
 	}
-	return strings.Contains(content, ": ") || strings.HasSuffix(content, ":")
+	return bytes.Contains(content, []byte(": ")) || (len(content) > 0 && content[len(content)-1] == ':')
 }
 
-// splitMapKey splits "key: value" → ("key", "value"), or "key:" → ("key", "").
-func splitMapKey(content string) (key, value string) {
+// splitMapKey splits "key: value" → ("key", "value"), or "key:" → ("key", nil).
+func splitMapKey(content []byte) (key, value []byte) {
 	switch {
 	case len(content) > 0 && content[0] == '"':
 		k, rest := parseDoubleQuotedRaw(content)
-		rest = strings.TrimPrefix(rest, ":")
-		rest = strings.TrimPrefix(rest, " ")
-		return k, strings.TrimSpace(rest)
+		rest = bytes.TrimPrefix(rest, []byte(":"))
+		rest = bytes.TrimPrefix(rest, []byte(" "))
+		return k, bytes.TrimSpace(rest)
 	case len(content) > 0 && content[0] == '\'':
 		k, rest := parseSingleQuotedRaw(content)
-		rest = strings.TrimPrefix(rest, ":")
-		rest = strings.TrimPrefix(rest, " ")
-		return k, strings.TrimSpace(rest)
+		rest = bytes.TrimPrefix(rest, []byte(":"))
+		rest = bytes.TrimPrefix(rest, []byte(" "))
+		return k, bytes.TrimSpace(rest)
 	}
-	if idx := strings.Index(content, ": "); idx >= 0 {
-		return content[:idx], strings.TrimSpace(content[idx+2:])
+	if idx := bytes.Index(content, []byte(": ")); idx >= 0 {
+		return content[:idx], bytes.TrimSpace(content[idx+2:])
 	}
-	if strings.HasSuffix(content, ":") {
-		return content[:len(content)-1], ""
+	if len(content) > 0 && content[len(content)-1] == ':' {
+		return content[:len(content)-1], nil
 	}
-	return content, ""
+	return content, nil
 }
 
-// parseDoubleQuotedRaw returns (unescaped string, remainder after closing quote).
-func parseDoubleQuotedRaw(s string) (string, string) {
+// parseDoubleQuotedRaw returns (unescaped bytes, remainder after closing quote).
+func parseDoubleQuotedRaw(s []byte) ([]byte, []byte) {
 	str, end, _ := parseDoubleQuoted(s)
 	return str, s[end:]
 }
 
-// parseSingleQuotedRaw returns (string, remainder after closing quote).
-func parseSingleQuotedRaw(s string) (string, string) {
+// parseSingleQuotedRaw returns (unescaped bytes, remainder after closing quote).
+func parseSingleQuotedRaw(s []byte) ([]byte, []byte) {
 	if len(s) < 2 || s[0] != '\'' {
-		return s, ""
+		return s, nil
 	}
-	// Fast path: no '' escape sequences — return a no-alloc substring.
+	// Fast path: no '' escape sequences — return a no-alloc sub-slice.
 	for i := 1; i < len(s); i++ {
 		if s[i] == '\'' {
 			if i+1 < len(s) && s[i+1] == '\'' {
@@ -241,7 +240,7 @@ func parseSingleQuotedRaw(s string) (string, string) {
 		}
 	}
 	// Slow path: has '' escapes, must decode.
-	var b strings.Builder
+	var b bytes.Buffer
 	i := 1
 	for i < len(s) {
 		if s[i] == '\'' {
@@ -250,19 +249,19 @@ func parseSingleQuotedRaw(s string) (string, string) {
 				i += 2
 				continue
 			}
-			return b.String(), s[i+1:]
+			return b.Bytes(), s[i+1:]
 		}
 		b.WriteByte(s[i])
 		i++
 	}
-	return b.String(), ""
+	return b.Bytes(), nil
 }
 
 // --------------------------------------------------------------------------
 // Misc helpers
 // --------------------------------------------------------------------------
 
-func leadingSpaces(s string) int {
+func leadingSpaces(s []byte) int {
 	n := 0
 	for _, c := range s {
 		if c == ' ' {
@@ -276,9 +275,9 @@ func leadingSpaces(s string) int {
 	return n
 }
 
-// isYAMLNumber returns true for strings that are valid JSON numbers.
-func isYAMLNumber(s string) bool {
-	if s == "" {
+// isYAMLNumber returns true for byte slices that are valid JSON numbers (with optional + prefix).
+func isYAMLNumber(s []byte) bool {
+	if len(s) == 0 {
 		return false
 	}
 	i := 0
@@ -315,7 +314,7 @@ func isYAMLNumber(s string) bool {
 }
 
 // stripInlineComment removes a # comment from a content line, respecting quotes.
-func stripInlineComment(s string) string {
+func stripInlineComment(s []byte) []byte {
 	inDouble := false
 	inSingle := false
 	for i := 0; i < len(s); i++ {
@@ -339,7 +338,7 @@ func stripInlineComment(s string) string {
 			inSingle = true
 		case c == '#':
 			if i > 0 && (s[i-1] == ' ' || s[i-1] == '\t') {
-				return strings.TrimRight(s[:i], " \t")
+				return bytes.TrimRight(s[:i], " \t")
 			}
 		}
 	}
