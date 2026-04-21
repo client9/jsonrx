@@ -1,7 +1,15 @@
 
+build:
+	go build ./...
+	go build ./cmd/tojson/...
 # test - run all unit tests
 test:
 	go test ./...
+
+version:
+	@uname -a
+	@go version
+	@golangci-lint --version
 
 # bench - run local benchmarks
 bench:
