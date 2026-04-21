@@ -45,8 +45,9 @@ func writeScalar(s string, buf *bytes.Buffer) error {
 }
 
 // writeJSONString writes s as a properly escaped JSON string.
+// Uses AvailableBuffer so that when buf has spare capacity no allocation is needed.
 func writeJSONString(s string, buf *bytes.Buffer) {
-	buf.Write(appendString(nil, []byte(s)))
+	buf.Write(appendStringStr(buf.AvailableBuffer(), s))
 }
 
 // --------------------------------------------------------------------------
@@ -77,6 +78,16 @@ func parseDoubleQuoted(s string) (string, int, error) {
 	if len(s) < 2 || s[0] != '"' {
 		return s, len(s), nil
 	}
+	// Fast path: no escape sequences — return a no-alloc substring.
+	for i := 1; i < len(s); i++ {
+		if s[i] == '"' {
+			return s[1:i], i + 1, nil
+		}
+		if s[i] == '\\' {
+			break // has escapes, fall through to slow path
+		}
+	}
+	// Slow path: has escape sequences, must decode.
 	var b strings.Builder
 	i := 1
 	for i < len(s) {
@@ -220,6 +231,16 @@ func parseSingleQuotedRaw(s string) (string, string) {
 	if len(s) < 2 || s[0] != '\'' {
 		return s, ""
 	}
+	// Fast path: no '' escape sequences — return a no-alloc substring.
+	for i := 1; i < len(s); i++ {
+		if s[i] == '\'' {
+			if i+1 < len(s) && s[i+1] == '\'' {
+				break // has '' escape, fall through to slow path
+			}
+			return s[1:i], s[i+1:]
+		}
+	}
+	// Slow path: has '' escapes, must decode.
 	var b strings.Builder
 	i := 1
 	for i < len(s) {

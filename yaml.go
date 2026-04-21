@@ -112,10 +112,20 @@ func (p *parser) consume() pline {
 }
 
 // parseBlock writes a JSON value for the block starting at the current
-// position. Only considers lines with indent > parentIndent.
+// position. Only considers lines with indent > parentIndent, except that
+// a block sequence may begin at the same indent as its parent mapping key
+// (YAML compact notation).
 func (p *parser) parseBlock(parentIndent int, buf *bytes.Buffer) error {
 	l, ok := p.peek()
-	if !ok || l.indent <= parentIndent {
+	if !ok {
+		buf.WriteString("null")
+		return nil
+	}
+	if l.indent <= parentIndent {
+		// Compact notation: block sequence value at same indent as mapping key.
+		if l.indent == parentIndent && isSeqItem(l.content) {
+			return p.parseSequence(l.indent, buf)
+		}
 		buf.WriteString("null")
 		return nil
 	}

@@ -85,6 +85,28 @@ sample:
 `, `{"sample":["rigid","better for data interchange"]}`)
 }
 
+func TestYAMLCompactSequence(t *testing.T) {
+	// Block sequence at the same indent as the parent mapping key (YAML compact notation).
+	roundtripYAML(t, `
+genres:
+- mystery
+- romance
+tags:
+- red
+- blue
+`, `{"genres":["mystery","romance"],"tags":["red","blue"]}`)
+
+	// Mixed: some keys with indented sequences, some compact.
+	roundtripYAML(t, `
+a:
+- 1
+- 2
+b:
+  - 3
+  - 4
+`, `{"a":[1,2],"b":[3,4]}`)
+}
+
 func TestYAMLNestedMapping(t *testing.T) {
 	roundtripYAML(t, `
 person:
