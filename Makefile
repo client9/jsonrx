@@ -21,6 +21,7 @@ cover:
 lint:
 	go mod tidy
 	gofmt -w -s *.go
+	golangci-lint config verify
 	golangci-lint run .
 
 # clean - remove any generated files
