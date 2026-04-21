@@ -13,7 +13,7 @@ import (
 func BenchmarkFromJSONOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := FromJSON5([]byte(frontmatter1JSON)); err != nil {
+		if _, err := FromJSONVariant([]byte(frontmatter1JSON)); err != nil {
 			b.Fatal(err)
 		}
 	}

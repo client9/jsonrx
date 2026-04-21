@@ -1,4 +1,4 @@
-// Package tojson converts JSON5, YAML, and TOML to standard JSON bytes
+// Package tojson converts JSON variants, YAML, and TOML to standard JSON bytes
 // without reflection or intermediate data structures.
 //
 // All three formats follow the same two-step pattern: convert to JSON, then
@@ -10,7 +10,7 @@
 //
 // Each format uses the primary conversion form:
 //
-//	tojson.FromJSON5(src []byte) ([]byte, error)
+//	tojson.FromJSONVariant(src []byte) ([]byte, error)
 //	tojson.FromYAML(src []byte) ([]byte, error)
 //	tojson.FromTOML(src []byte) ([]byte, error)
 //

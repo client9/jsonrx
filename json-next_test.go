@@ -72,7 +72,7 @@ func TestJsonNext(t *testing.T) {
 			orig := src[:idx]
 			want := src[idx+3:]
 
-			data, err := FromJSON5(orig)
+			data, err := FromJSONVariant(orig)
 			if err != nil {
 				t.Fatalf("%s: Got unexpected error: %v", orig, err)
 			}
@@ -85,7 +85,7 @@ func TestJsonNext(t *testing.T) {
 			}
 
 			// valid... does it match the expected?
-			data2, err := FromJSON5(want)
+			data2, err := FromJSONVariant(want)
 			if err != nil {
 				t.Errorf("Unable to decode valid JSON %v", err)
 			}

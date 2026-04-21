@@ -32,7 +32,7 @@ func TestDecodeIdentity(t *testing.T) {
 		"{\"foo\":\"bar\",\"rock\":{}}",
 	}
 	for _, tt := range cases {
-		out, err := FromJSON5([]byte(tt))
+		out, err := FromJSONVariant([]byte(tt))
 		if err != nil {
 			t.Errorf("Got unexpected error: %v", err)
 		}
@@ -73,7 +73,7 @@ func TestDecodeComma(t *testing.T) {
 		},
 	}
 	for _, tt := range cases {
-		out, err := FromJSON5([]byte(tt.in))
+		out, err := FromJSONVariant([]byte(tt.in))
 		if err != nil {
 			t.Errorf("Got unexpected error: %v", err)
 		}
@@ -108,7 +108,7 @@ func TestDecodeComments(t *testing.T) {
 		},
 	}
 	for _, tt := range cases {
-		out, err := FromJSON5([]byte(tt.in))
+		out, err := FromJSONVariant([]byte(tt.in))
 		if err != nil {
 			t.Errorf("Got error: %v", err)
 		}
@@ -167,7 +167,7 @@ func TestDecodeNumbers(t *testing.T) {
 	}
 
 	for _, tt := range cases {
-		out, err := FromJSON5([]byte(tt.in))
+		out, err := FromJSONVariant([]byte(tt.in))
 		if err != nil {
 			t.Errorf("Got error: %v", err)
 		}
@@ -194,9 +194,9 @@ func TestDecodeNumberErrors(t *testing.T) {
 		`[0x10000000000000000]`,
 	}
 	for _, in := range cases {
-		_, err := FromJSON5([]byte(in))
+		_, err := FromJSONVariant([]byte(in))
 		if err == nil {
-			t.Errorf("FromJSON5(%q): expected error, got nil", in)
+			t.Errorf("FromJSONVariant(%q): expected error, got nil", in)
 		}
 	}
 }
@@ -221,7 +221,7 @@ func TestDecodeStrings(t *testing.T) {
 		},
 	}
 	for _, tt := range cases {
-		out, err := FromJSON5([]byte(tt.in))
+		out, err := FromJSONVariant([]byte(tt.in))
 		if err != nil {
 			t.Errorf("Got error: %v", err)
 		}
@@ -241,7 +241,7 @@ func TestDecodeArrayValueTypes(t *testing.T) {
 		{"[1.5,0xFF,[1],{}]", "[1.5,255,[1],{}]"},
 	}
 	for _, tt := range cases {
-		out, err := FromJSON5([]byte(tt.in))
+		out, err := FromJSONVariant([]byte(tt.in))
 		if err != nil {
 			t.Errorf("Decode(%q): unexpected error: %v", tt.in, err)
 		}
@@ -259,7 +259,7 @@ func TestDecodeImplicitComma(t *testing.T) {
 		{"[[1][2]]", "[[1],[2]]"},          // adjacent containers in array
 	}
 	for _, tt := range cases {
-		out, err := FromJSON5([]byte(tt.in))
+		out, err := FromJSONVariant([]byte(tt.in))
 		if err != nil {
 			t.Errorf("Decode(%q): unexpected error: %v", tt.in, err)
 		}
@@ -278,7 +278,7 @@ func TestDecodeErrors(t *testing.T) {
 		"[:]",   // colon in array value position
 	}
 	for _, in := range cases {
-		_, err := FromJSON5([]byte(in))
+		_, err := FromJSONVariant([]byte(in))
 		if err == nil {
 			t.Errorf("Decode(%q): expected error, got nil", in)
 		}
@@ -294,7 +294,7 @@ func TestDecodeNaN(t *testing.T) {
 		`[1,NaN,2]`,
 	}
 	for _, in := range cases {
-		_, err := FromJSON5([]byte(in))
+		_, err := FromJSONVariant([]byte(in))
 		if err == nil {
 			t.Errorf("Decode(%q): expected error for NaN, got nil", in)
 		}
@@ -320,7 +320,7 @@ func TestJSON5ParseError(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := FromJSON5([]byte(tc.input))
+			_, err := FromJSONVariant([]byte(tc.input))
 			if err == nil {
 				t.Fatalf("expected error, got nil")
 			}

@@ -2,10 +2,11 @@ package tojson
 
 import "bytes"
 
-// FromJSON5 converts JSON5/HuJSON/JWCC/JSONC/HanSON to standard JSON.
-// It handles trailing/leading commas, line and block comments, unquoted keys,
-// single-quoted and backtick strings, hex literals, and non-finite numbers.
-func FromJSON5(src []byte) ([]byte, error) {
+// FromJSONVariant converts JSON and common JSON-derived variants to standard JSON.
+// It handles JSON5/HuJSON/JWCC/JSONC/HanSON features such as trailing/leading
+// commas, line and block comments, unquoted keys, single-quoted and backtick
+// strings, hex literals, and non-finite numbers.
+func FromJSONVariant(src []byte) ([]byte, error) {
 	dst := bytes.Buffer{}
 	dst.Grow(len(src))
 	d := decoder{

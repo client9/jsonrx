@@ -2,7 +2,7 @@ package tojson
 
 import "fmt"
 
-// ParseError is returned by FromJSON5, FromYAML, and FromTOML when the input
+// ParseError is returned by FromJSONVariant, FromYAML, and FromTOML when the input
 // cannot be parsed. Line and Column are 1-based; Column is 0 when not available.
 type ParseError struct {
 	Line    int    // 1-based line number in the original input
