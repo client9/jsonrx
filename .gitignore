@@ -29,6 +29,7 @@ go.work.sum
 
 # generated
 cover.out
+coverage.out
 benchmarks/benchmarks.test
 benchmarks/mem.out
 

@@ -25,7 +25,7 @@ lint:
 
 # clean - remove any generated files
 clean:
-	rm -f cover.out
+	rm -f cover.out coverage.out
 	rm -f tojson	
 	rm -f benchmarks/mem.out
 	rm -f benchmarks/benchmarks.test
