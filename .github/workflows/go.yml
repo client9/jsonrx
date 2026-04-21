@@ -30,6 +30,8 @@ jobs:
 
     - name: Install golangci-lint
       uses: golangci/golangci-lint-action@v9
+      with:
+          install-only: true
 
     - name: Version
       run: make version
