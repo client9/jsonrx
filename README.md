@@ -11,7 +11,8 @@ Convert YAML, TOML, and JSON variants to standard JSON bytes — no dependencies
 - **Zero dependencies** — stdlib only, nothing added to your module graph
 - **One decode path** — all formats produce JSON bytes; unmarshal with `encoding/json` as usual
 - **Only `json` struct tags** — no separate `yaml` or `toml` tags needed
-- **Inspectable output** — the JSON bytes can be logged, stored, or passed to any JSON tool
+- **Lean performance** — on typical frontmatter-style inputs, YAML conversion benchmarked at 3x-5x faster with 3x-5x less memory than common Go YAML packages; TOML used about 2x
+  less memory in our tests. See [performance notes](docs/performance.md).
 
 ## Install
 
@@ -103,7 +104,7 @@ json.Unmarshal(raw, &cfg)
 
 ### TOML
 
-Parses all TOML files.
+Accepts any valid TOML document.
 
 ```go
 type Config struct {

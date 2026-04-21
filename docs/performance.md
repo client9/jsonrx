@@ -8,9 +8,10 @@
 
 ## JSON Variants
 
-Summary: Parsing JSON variants is around 2x slower, and 3x more memory.
+Summary: Parsing JSON variants is around 2x slower, and 3x more memory than pure `encoding/json`.
 
-It's slower is every number and string needs to be checked and normalized. The whole document is effectively parsed twice.
+- There is no standard JSON variant package in Go.
+- It's slower compared to `encoding/json` since is every number and string needs to be checked and normalized. The whole document is effectively parsed twice.  
 
 | Package | Per Call | Memory | Allocations |
 |---------------------------------|------------:|------------:|-------------:|
