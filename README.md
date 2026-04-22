@@ -218,4 +218,5 @@ Use `-f` when reading from stdin so the input format is explicit.
 
 ## License
 
-MIT
+MIT. See [LICENSE.txt](LICENSE.txt)
+
