@@ -321,13 +321,7 @@ func TestJSON5ParseError(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := FromJSONVariant([]byte(tc.input))
-			if err == nil {
-				t.Fatalf("expected error, got nil")
-			}
-			pe, ok := err.(*ParseError)
-			if !ok {
-				t.Fatalf("expected *ParseError, got %T: %v", err, err)
-			}
+			pe := requireParseError(t, err)
 			if pe.Line != tc.line {
 				t.Errorf("expected line %d, got %d (msg: %s)", tc.line, pe.Line, pe.Message)
 			}

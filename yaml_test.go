@@ -268,13 +268,7 @@ func TestYAMLParseError(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := FromYAML([]byte(tc.input))
-			if err == nil {
-				t.Fatalf("expected error, got nil")
-			}
-			pe, ok := err.(*ParseError)
-			if !ok {
-				t.Fatalf("expected *ParseError, got %T: %v", err, err)
-			}
+			pe := requireParseError(t, err)
 			if pe.Line != tc.line {
 				t.Errorf("expected line %d, got %d (msg: %s)", tc.line, pe.Line, pe.Message)
 			}
@@ -348,8 +342,8 @@ key: >-
 }
 
 func TestYAMLParseErrorString(t *testing.T) {
-	e := &ParseError{Line: 3, Message: "bad token"}
-	if got, want := e.Error(), "line 3: bad token"; got != want {
+	e := &ParseError{Line: 3, Column: 7, Message: "bad token"}
+	if got, want := e.Error(), "line 3, column 7: bad token"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
@@ -418,9 +412,8 @@ func TestYAMLFlowErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := FromYAML([]byte(tc.input)); err == nil {
-				t.Errorf("expected error for input %q", tc.input)
-			}
+			_, err := FromYAML([]byte(tc.input))
+			requireParseError(t, err)
 		})
 	}
 }
@@ -439,16 +432,6 @@ func TestYAMLConvertEmptyInput(t *testing.T) {
 		if err != nil || string(got) != "null" {
 			t.Errorf("FromYAML(%q) = %s, %v; want null, nil", input, got, err)
 		}
-	}
-}
-
-func TestYAMLAtLine(t *testing.T) {
-	if got := atLine(0, nil); got != nil {
-		t.Errorf("atLine(nil) = %v, want nil", got)
-	}
-	pe := &ParseError{Line: 5, Message: "original"}
-	if got := atLine(10, pe); got != pe {
-		t.Errorf("atLine(ParseError) did not pass through: got %v", got)
 	}
 }
 
@@ -503,9 +486,8 @@ func TestYAMLParseErrorPaths(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := FromYAML([]byte(tc.input)); err == nil {
-				t.Errorf("expected error for input %q", tc.input)
-			}
+			_, err := FromYAML([]byte(tc.input))
+			requireParseError(t, err)
 		})
 	}
 }

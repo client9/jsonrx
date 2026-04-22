@@ -3,7 +3,8 @@ package tojson
 import "fmt"
 
 // ParseError is returned by FromJSONVariant, FromYAML, and FromTOML when the input
-// cannot be parsed. Line and Column are 1-based.
+// cannot be parsed. Library-generated parse errors always use 1-based line and
+// column numbers.
 type ParseError struct {
 	Line    int    // 1-based line number in the original input
 	Column  int    // 1-based column number
@@ -15,18 +16,6 @@ func (e *ParseError) Error() string {
 		return fmt.Sprintf("line %d, column %d: %s", e.Line, e.Column, e.Message)
 	}
 	return fmt.Sprintf("line %d: %s", e.Line, e.Message)
-}
-
-// atLine wraps err with a 1-based line number unless it is already a ParseError.
-// rawLine is a 0-based index into the original input lines.
-func atLine(rawLine int, err error) error {
-	if err == nil {
-		return nil
-	}
-	if _, ok := err.(*ParseError); ok {
-		return err
-	}
-	return &ParseError{Line: rawLine + 1, Message: err.Error()}
 }
 
 // atLineCol wraps err with a 1-based line and column unless it is already a ParseError.

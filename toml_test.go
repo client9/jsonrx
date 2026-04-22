@@ -304,13 +304,7 @@ func TestTOMLParseErrorLineNumber(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := FromTOML([]byte(tc.input))
-			if err == nil {
-				t.Fatalf("expected error, got nil")
-			}
-			pe, ok := err.(*ParseError)
-			if !ok {
-				t.Fatalf("expected *ParseError, got %T: %v", err, err)
-			}
+			pe := requireParseError(t, err)
 			if pe.Line != tc.line {
 				t.Errorf("expected line %d, got %d (msg: %s)", tc.line, pe.Line, pe.Message)
 			}
@@ -322,14 +316,8 @@ func TestTOMLParseErrorLineNumber(t *testing.T) {
 }
 
 func TestTOMLParseErrorString(t *testing.T) {
-	// Column=0 means not available: omit from message.
-	e := &ParseError{Line: 5, Message: "bad token"}
-	if got, want := e.Error(), "line 5: bad token"; got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-	// Column>0: include in message.
-	e2 := &ParseError{Line: 5, Column: 3, Message: "bad token"}
-	if got, want := e2.Error(), "line 5, column 3: bad token"; got != want {
+	e := &ParseError{Line: 5, Column: 3, Message: "bad token"}
+	if got, want := e.Error(), "line 5, column 3: bad token"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
