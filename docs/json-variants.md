@@ -1,9 +1,6 @@
-# jsonrx
+# tojson.FromJSONVariant
+
 Convert alternative JSON formats back to spec so you can get on with your life.
-
-## WIP -- Not quite ready!
-
-* However a lot more work needs to be done on error cases.  Row/Collum numbers on errors are likely wrong
 
 ## What does it do?
 

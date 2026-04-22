@@ -1,10 +1,8 @@
-# XXX
-
-Fast YAML-to-JSON converter for the common case.
+# Minimal YAML
 
 `tojson.FromYAML` converts a subset of YAML directly to JSON bytes, then hands off to Go's standard `encoding/json` for unmarshalling. No reflection, no intermediate tree — just a single pass from YAML to JSON.
 
-Most real-world YAML is simple: string keys, scalar values, nested maps and lists. `FromYAML` handles all of that. What it skips — anchors, tags, complex keys — most applications never use. The result is 6x faster and uses 6x less memory than full YAML parsers, with a much smaller codebase.
+Most real-world YAML is simple: string keys, scalar values, nested maps and lists. `FromYAML` handles all of that. What it skips — anchors, tags, complex keys — most applications never use. 
 
 ```go
 raw, err := tojson.FromYAML(yamlInput)  // → compact JSON bytes
@@ -45,20 +43,3 @@ The benefit being only json struct tags are needed, and can leveage all the JSON
 .
 
 The concept is described [here](https://web.archive.org/web/20190603050330/http://ghodss.com/2014/the-right-way-to-handle-yaml-in-golang/).
-
-## Perfomance
-
-Unmarshaling [`testdata/frontmatter1.yml`](testdata/frontmatter1.yml) into `map[string]any` on Apple M4:
-
-| Package | ns/op | B/op | allocs/op |
-|---|---:|---:|---:|
-| **tojson* (FromYAML → json.Unmarshal) | 2,808 | 2,032 | 28 |
-| `gopkg.in/yaml.v3` | 16,170 | 12,752 | 171 |
-| `sigs.k8s.io/yaml` | 19,222 | 13,816 | 239 |
-| `github.com/goccy/go-yaml` | 25,516 | 21,456 | 488 |
-
-
-
-
-
-
