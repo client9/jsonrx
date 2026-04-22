@@ -72,6 +72,8 @@ func main() {
 
 This is intended for JSON5, JWCC, HuJSON, JSONC, and HanSON-style inputs that should normalize to strict JSON.
 
+For more details, see [docs/json-variants.md](docs/json-variants.md).
+
 ### YAML
 
 `FromYAML` supports a practical YAML subset aimed at config files and frontmatter.
@@ -82,6 +84,7 @@ Supported well:
 - sequences
 - flow collections (`{}` and `[]`)
 - quoted and plain scalars
+- multiline strings
 - block scalars
 
 Not supported:
@@ -90,7 +93,7 @@ Not supported:
 - tags
 - complex keys (`? ...`)
 
-If you need full YAML spec coverage, this package is the wrong tool.
+If you need full YAML spec coverage or YAML AST manipulations, this package is the wrong tool.
 
 ### TOML
 
@@ -108,7 +111,7 @@ All functions return compact JSON on success.
 
 ### Error Handling
 
-Parse failures are returned as `*tojson.ParseError`, which includes a 1-based line number and, when available, a 1-based column number.
+Parse failures are returned as `*tojson.ParseError`, which includes a 1-based line number and a 1-based column number where the failure occurred.
 
 ```go
 _, err := tojson.FromJSONVariant([]byte("{ unclosed: [1, 2, }"))
@@ -119,8 +122,6 @@ if err != nil {
 	}
 }
 ```
-
-If a column is not available, `ParseError.Column` is `0`.
 
 ## Examples
 
