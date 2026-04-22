@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func BenchmarkFromJSONOnly(b *testing.B) {
+func BenchmarkFromJSONVariantOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := FromJSONVariant([]byte(frontmatter1JSON)); err != nil {
