@@ -41,6 +41,6 @@ Summary: About 2x less memory. Comparable speed to `pelletier/go-toml`, 2x faste
 
 | Package | Per Call | Memory | Allocations |
 |-------------------------------------------------------------------|------------:|----------:|-------------:|
-| **tojson.FromTOML**                                               |  2771 ns/op | 2616 B/op | 63 allocs/op |
-| [BurntSushi/toml](https://github.com/BurntSushi/toml) v1.6.0      |  5420 ns/op | 5840 B/op | 99 allocs/op |
-| [pelletier/go-toml](https://github.com/pelletier/go-toml) v2.3.0  |  2371 ns/op | 4816 B/op | 68 allocs/op |
+| **tojson.FromTOML**                                               |  2481 ns/op | 2344 B/op | 55 allocs/op |
+| [BurntSushi/toml](https://github.com/BurntSushi/toml) v1.6.0      |  5279 ns/op | 5840 B/op | 99 allocs/op |
+| [pelletier/go-toml](https://github.com/pelletier/go-toml) v2.3.0  |  2298 ns/op | 4816 B/op | 68 allocs/op |

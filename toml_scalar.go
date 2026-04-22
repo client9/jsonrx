@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -299,114 +298,143 @@ func parseTOMLMultilineLiteral(s []byte, rawLines [][]byte, lineIdx int) ([]byte
 // Number parser
 // --------------------------------------------------------------------------
 
-// parseTOMLNumber parses a TOML number. Internally works with strings because
-// all number parsing (strconv, underscore validation) requires string APIs.
+// parseTOMLNumber parses a TOML number, returning JSON-ready bytes.
+// Works entirely in []byte to avoid string conversion allocations.
 func parseTOMLNumber(s []byte) ([]byte, error) {
-	orig := string(s)
-	str := orig
-
-	sign := ""
-	if len(str) > 0 && (str[0] == '+' || str[0] == '-') {
-		sign = string(str[0])
-		str = str[1:]
-	}
-	if len(str) == 0 {
-		return nil, fmt.Errorf("invalid number: %s", orig)
+	if len(s) == 0 {
+		return nil, fmt.Errorf("invalid number")
 	}
 
-	if sign == "" {
-		if strings.HasPrefix(str, "0x") || strings.HasPrefix(str, "0X") {
-			digits := stripUnderscores(str[2:], orig)
-			if digits == "" {
-				return nil, fmt.Errorf("invalid hex number: %s", orig)
+	neg := s[0] == '-'
+	hasSign := neg || s[0] == '+'
+	body := s
+	if hasSign {
+		body = s[1:]
+	}
+	if len(body) == 0 {
+		return nil, fmt.Errorf("invalid number: %s", s)
+	}
+
+	// Radix-prefixed integers: no sign allowed.
+	if !hasSign {
+		if (body[0] == '0') && len(body) > 1 {
+			switch body[1] {
+			case 'x', 'X':
+				digits := stripUnderscoresBytes(body[2:])
+				if len(digits) == 0 {
+					return nil, fmt.Errorf("invalid hex number: %s", s)
+				}
+				v, err := strconv.ParseInt(string(digits), 16, 64)
+				if err != nil {
+					return nil, fmt.Errorf("invalid hex number %s: %v", s, err)
+				}
+				return strconv.AppendInt(nil, v, 10), nil
+			case 'o', 'O':
+				digits := stripUnderscoresBytes(body[2:])
+				v, err := strconv.ParseInt(string(digits), 8, 64)
+				if err != nil {
+					return nil, fmt.Errorf("invalid octal number %s: %v", s, err)
+				}
+				return strconv.AppendInt(nil, v, 10), nil
+			case 'b', 'B':
+				digits := stripUnderscoresBytes(body[2:])
+				v, err := strconv.ParseInt(string(digits), 2, 64)
+				if err != nil {
+					return nil, fmt.Errorf("invalid binary number %s: %v", s, err)
+				}
+				return strconv.AppendInt(nil, v, 10), nil
 			}
-			v, err := strconv.ParseInt(digits, 16, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid hex number %s: %v", orig, err)
-			}
-			return []byte(strconv.FormatInt(v, 10)), nil
-		}
-		if strings.HasPrefix(str, "0o") || strings.HasPrefix(str, "0O") {
-			digits := stripUnderscores(str[2:], orig)
-			v, err := strconv.ParseInt(digits, 8, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid octal number %s: %v", orig, err)
-			}
-			return []byte(strconv.FormatInt(v, 10)), nil
-		}
-		if strings.HasPrefix(str, "0b") || strings.HasPrefix(str, "0B") {
-			digits := stripUnderscores(str[2:], orig)
-			v, err := strconv.ParseInt(digits, 2, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid binary number %s: %v", orig, err)
-			}
-			return []byte(strconv.FormatInt(v, 10)), nil
 		}
 	}
 
-	stripped, err := stripUnderscoresValidated(str)
+	stripped, err := stripUnderscoresBytesValidated(body)
 	if err != nil {
-		return nil, fmt.Errorf("invalid number %s: %v", orig, err)
+		return nil, fmt.Errorf("invalid number %s: %v", s, err)
 	}
-	str = stripped
+	wasStripped := len(stripped) != len(body)
+	body = stripped
 
-	if len(str) > 1 && str[0] == '0' && str[1] >= '0' && str[1] <= '9' {
-		return nil, fmt.Errorf("leading zeros not allowed in integer: %s", orig)
+	if len(body) > 1 && body[0] == '0' && body[1] >= '0' && body[1] <= '9' {
+		return nil, fmt.Errorf("leading zeros not allowed in integer: %s", s)
 	}
 
-	isFloat := strings.ContainsAny(str, ".eE")
-	if sign == "+" {
-		sign = ""
+	isFloat := bytes.ContainsAny(body, ".eE")
+
+	// Build result without unnecessary allocation:
+	// - no sign or '+': return body (sub-slice of s, or stripped copy)
+	// - '-' with no stripping: return s (already starts with '-')
+	// - '-' with stripping: need to prepend '-' to new allocation
+	var result []byte
+	if neg {
+		if wasStripped {
+			result = make([]byte, 1+len(body))
+			result[0] = '-'
+			copy(result[1:], body)
+		} else {
+			result = s // original includes the '-'
+		}
+	} else {
+		result = body // '+' stripped or no sign; body points into s or is new alloc
 	}
-	result := sign + str
 
 	if isFloat {
-		if _, err := strconv.ParseFloat(result, 64); err != nil {
-			return nil, fmt.Errorf("invalid float %s: %v", orig, err)
+		if _, err := strconv.ParseFloat(string(result), 64); err != nil {
+			return nil, fmt.Errorf("invalid float %s: %v", s, err)
 		}
-		return []byte(result), nil
+		return result, nil
 	}
 
-	if _, err := strconv.ParseInt(result, 10, 64); err != nil {
-		if _, err2 := strconv.ParseUint(result, 10, 64); err2 != nil {
-			return nil, fmt.Errorf("invalid integer %s: %v", orig, err)
+	if _, err := strconv.ParseInt(string(result), 10, 64); err != nil {
+		if _, err2 := strconv.ParseUint(string(result), 10, 64); err2 != nil {
+			return nil, fmt.Errorf("invalid integer %s: %v", s, err)
 		}
 	}
-	return []byte(result), nil
+	return result, nil
 }
 
-// stripUnderscores removes underscores without validation (for radix-prefixed numbers).
-func stripUnderscores(s, _ string) string {
-	return strings.ReplaceAll(s, "_", "")
+// stripUnderscoresBytes removes underscores without validation (for radix-prefixed numbers).
+// Returns s unchanged (same backing array) if no underscores present.
+func stripUnderscoresBytes(s []byte) []byte {
+	if bytes.IndexByte(s, '_') < 0 {
+		return s
+	}
+	out := make([]byte, 0, len(s))
+	for _, c := range s {
+		if c != '_' {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
-// stripUnderscoresValidated removes underscores from a decimal/float string,
+// stripUnderscoresBytesValidated removes underscores from a decimal/float number,
 // validating that they are not at the start, end, or adjacent.
-func stripUnderscoresValidated(s string) (string, error) {
-	if !strings.Contains(s, "_") {
+// Returns s unchanged (same backing array) if no underscores present.
+func stripUnderscoresBytesValidated(s []byte) ([]byte, error) {
+	if bytes.IndexByte(s, '_') < 0 {
 		return s, nil
 	}
-	var b strings.Builder
+	out := make([]byte, 0, len(s))
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c == '_' {
 			if i == 0 || i == len(s)-1 {
-				return "", fmt.Errorf("underscore at start or end of number")
+				return nil, fmt.Errorf("underscore at start or end of number")
 			}
 			if s[i-1] == '_' {
-				return "", fmt.Errorf("adjacent underscores in number")
+				return nil, fmt.Errorf("adjacent underscores in number")
 			}
 			if s[i-1] == '.' || (i+1 < len(s) && s[i+1] == '.') {
-				return "", fmt.Errorf("underscore adjacent to decimal point")
+				return nil, fmt.Errorf("underscore adjacent to decimal point")
 			}
 			if s[i-1] == 'e' || s[i-1] == 'E' || (i+1 < len(s) && (s[i+1] == 'e' || s[i+1] == 'E')) {
-				return "", fmt.Errorf("underscore adjacent to exponent")
+				return nil, fmt.Errorf("underscore adjacent to exponent")
 			}
 			continue
 		}
-		b.WriteByte(c)
+		out = append(out, c)
 	}
-	return b.String(), nil
+	return out, nil
 }
 
 // --------------------------------------------------------------------------
@@ -450,6 +478,7 @@ func parseTOMLInlineTable(s []byte, pos int) (*jnode, int, error) {
 		return node, pos + 1, nil
 	}
 
+	var pathBuf [4][]byte
 	first := true
 	for pos < len(s) {
 		if !first {
@@ -463,7 +492,7 @@ func parseTOMLInlineTable(s []byte, pos int) (*jnode, int, error) {
 		}
 		first = false
 
-		path, rest, err := parseTOMLKeyPath(s[pos:])
+		path, rest, err := parseTOMLKeyPath(s[pos:], pathBuf[:0])
 		if err != nil {
 			return nil, pos, err
 		}

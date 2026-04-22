@@ -178,7 +178,8 @@ func (p *tomlParser) parseTableHeader(line []byte) error {
 		return fmt.Errorf("malformed table header: %s", line)
 	}
 	inner := line[1 : len(line)-1]
-	path, rest, err := parseTOMLKeyPath(inner)
+	var pathBuf [4][]byte
+	path, rest, err := parseTOMLKeyPath(inner, pathBuf[:0])
 	if err != nil {
 		return err
 	}
@@ -224,7 +225,8 @@ func (p *tomlParser) parseArrayTableHeader(line []byte) error {
 		return fmt.Errorf("malformed array-of-tables header: %s", line)
 	}
 	inner := line[2 : len(line)-2]
-	path, rest, err := parseTOMLKeyPath(inner)
+	var pathBuf [4][]byte
+	path, rest, err := parseTOMLKeyPath(inner, pathBuf[:0])
 	if err != nil {
 		return err
 	}
@@ -290,7 +292,8 @@ func (p *tomlParser) getOrCreateNode(root *jnode, path [][]byte, _ bool) (*jnode
 // --------------------------------------------------------------------------
 
 func (p *tomlParser) parseKeyValue(line []byte, rawLine int, leading int, ctx *jnode) error {
-	path, rest, err := parseTOMLKeyPath(line)
+	var pathBuf [4][]byte
+	path, rest, err := parseTOMLKeyPath(line, pathBuf[:0])
 	if err != nil {
 		return atLineCol(rawLine, leading, err)
 	}
@@ -331,9 +334,9 @@ func (p *tomlParser) parseKeyValue(line []byte, rawLine int, leading int, ctx *j
 
 // parseTOMLKeyPath parses a dotted key (e.g. a."b c".d) from the start of s.
 // Returns the decoded key segments and the remainder of s after the last segment.
-func parseTOMLKeyPath(s []byte) ([][]byte, []byte, error) {
-	var keysBuf [4][]byte
-	keys := keysBuf[:0]
+// buf is caller-provided backing storage (pass yourArray[:0]); avoids a heap alloc for ≤ cap(buf) keys.
+func parseTOMLKeyPath(s []byte, buf [][]byte) ([][]byte, []byte, error) {
+	keys := buf[:0]
 	for {
 		s = bytes.TrimLeft(s, " \t")
 		if len(s) == 0 {
@@ -391,11 +394,11 @@ func parseTOMLKeyPath(s []byte) ([][]byte, []byte, error) {
 // streamFrame tracks one open TOML section on the streaming stack.
 type streamFrame struct {
 	key       []byte
-	dotPath   string              // full dot-joined path (string for use as map key)
-	isAoT     bool                // opened by [[...]]
-	explicit  bool                // set when a [table] header explicitly named this frame
-	needComma bool                // next entry in this object needs a leading comma
-	usedKeys  map[string]struct{} // lazily allocated; detects duplicate keys
+	dotPath   string   // full dot-joined path (string for use as map key)
+	isAoT     bool     // opened by [[...]]
+	explicit  bool     // set when a [table] header explicitly named this frame
+	needComma bool     // next entry in this object needs a leading comma
+	usedKeys  [][]byte // lazily allocated; detects duplicate keys via bytes.Equal linear scan
 }
 
 // tomlConvertStreaming attempts a single-pass streaming TOML→JSON translation.
@@ -415,7 +418,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 
 	var inlineKeys [][]byte
 	var inlineComma []bool
-	var inlineUsed []map[string]struct{}
+	var inlineUsed [][][]byte
 
 	topNC := func() bool {
 		if len(inlineKeys) > 0 {
@@ -431,25 +434,18 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 		}
 	}
 	markKey := func(key []byte) error {
-		keyStr := string(key)
-		var m map[string]struct{}
+		var keys *[][]byte
 		if len(inlineKeys) > 0 {
-			m = inlineUsed[len(inlineUsed)-1]
-			if m == nil {
-				m = make(map[string]struct{}, 4)
-				inlineUsed[len(inlineUsed)-1] = m
-			}
+			keys = &inlineUsed[len(inlineUsed)-1]
 		} else {
-			f := &stack[len(stack)-1]
-			if f.usedKeys == nil {
-				f.usedKeys = make(map[string]struct{}, 4)
+			keys = &stack[len(stack)-1].usedKeys
+		}
+		for _, k := range *keys {
+			if bytes.Equal(k, key) {
+				return fmt.Errorf("duplicate key %q", key)
 			}
-			m = f.usedKeys
 		}
-		if _, dup := m[keyStr]; dup {
-			return fmt.Errorf("duplicate key %q", key)
-		}
-		m[keyStr] = struct{}{}
+		*keys = append(*keys, key)
 		return nil
 	}
 	closeInlineTo := func(depth int) {
@@ -488,7 +484,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 			if top.isAoT && top.dotPath == fullDotPath {
 				buf.WriteString("},{")
 				top.needComma = false
-				top.usedKeys = nil
+				top.usedKeys = top.usedKeys[:0]
 				return nil
 			}
 		}
@@ -528,9 +524,8 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 
 		for i := cd; i < len(path); i++ {
 			top := &stack[len(stack)-1]
-			keyStr := string(path[i])
-			if top.usedKeys != nil {
-				if _, dup := top.usedKeys[keyStr]; dup {
+			for _, k := range top.usedKeys {
+				if bytes.Equal(k, path[i]) {
 					var dp string
 					if i == len(path)-1 {
 						dp = fullDotPath
@@ -540,10 +535,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 					return fmt.Errorf("cannot define table %q: key already has a value", dp)
 				}
 			}
-			if top.usedKeys == nil {
-				top.usedKeys = make(map[string]struct{}, 4)
-			}
-			top.usedKeys[keyStr] = struct{}{}
+			top.usedKeys = append(top.usedKeys, path[i])
 
 			if top.needComma {
 				buf.WriteByte(',')
@@ -574,6 +566,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 		return nil
 	}
 
+	var pathBuf [4][]byte
 	lineIdx := 0
 	for lineIdx < len(lines) {
 		line := lines[lineIdx]
@@ -591,7 +584,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 			if !bytes.HasSuffix(trimmed, []byte("]]")) {
 				return nil, atLineCol(lineIdx-1, leading, fmt.Errorf("malformed array-of-tables header: %s", trimmed))
 			}
-			path, rest, err := parseTOMLKeyPath(trimmed[2 : len(trimmed)-2])
+			path, rest, err := parseTOMLKeyPath(trimmed[2:len(trimmed)-2], pathBuf[:0])
 			if err != nil {
 				return nil, atLineCol(lineIdx-1, leading, err)
 			}
@@ -609,7 +602,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 			if trimmed[len(trimmed)-1] != ']' {
 				return nil, atLineCol(lineIdx-1, leading, fmt.Errorf("malformed table header: %s", trimmed))
 			}
-			path, rest, err := parseTOMLKeyPath(trimmed[1 : len(trimmed)-1])
+			path, rest, err := parseTOMLKeyPath(trimmed[1:len(trimmed)-1], pathBuf[:0])
 			if err != nil {
 				return nil, atLineCol(lineIdx-1, leading, err)
 			}
@@ -657,7 +650,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 				lineIdx += consumed
 				setTopNC(true)
 			} else {
-				path, rest, err := parseTOMLKeyPath(trimmed)
+				path, rest, err := parseTOMLKeyPath(trimmed, pathBuf[:0])
 				if err != nil {
 					return nil, atLineCol(lineIdx-1, leading, err)
 				}
