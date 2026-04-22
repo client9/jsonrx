@@ -25,6 +25,7 @@ Convert alternative JSON formats back to spec so you can get on with your life.
 
 ## Supported JSON Variants
 
+- [JSON](https://www.json.org/json-en.html) The original.
 - [HuJSON](https://github.com/tailscale/hujson) (ending commas, C-style comments)
 - [JWCC](https://nigeltao.github.io/blog/2021/json-with-commas-comments.html) (ending commas, C-style comments)
 - [JSON5](https://json5.org) (JSON as Javascript)
