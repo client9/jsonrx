@@ -21,16 +21,16 @@ Summary: Parsing JSON variants adds about 25% overhead over pure `encoding/json`
 
 ## YAML
 
-Summary: 3x-4x faster, and 3-4x less memory.
+Summary: 3x-4x faster, and 4-5x less memory.
 
 Restricting objects to have only string keys, and not storing state with aliases and tags really pays off.
 
 | Package | Per Call | Memory | Allocations |
 |-------------------------------------------------------------------------|------------:|------------:|--------------:|
-| **tojson.FromYAML**                                                     |  2860 ns/op |   3656 B/op |  65 allocs/op |
-| [go-yaml/yaml](https://github.com/go-yaml/yaml) v3.0.1                  |  8393 ns/op |  12752 B/op | 170 allocs/op |
-| [goccy/go-yaml](https://github.com/goccy/go-yaml) v1.19.2               | 13123 ns/op |  21456 B/op | 488 allocs/op |
-| [kubernetes-sigs/yaml](https://github.com/kubernetes-sigs/yaml) v1.6.0  |  9972 ns/op |  13800 B/op | 238 allocs/op |
+| **tojson.FromYAML**                                                     |  2448 ns/op |   2600 B/op |  51 allocs/op |
+| [go-yaml/yaml](https://github.com/go-yaml/yaml) v3.0.1                  |  8213 ns/op |  12752 B/op | 170 allocs/op |
+| [goccy/go-yaml](https://github.com/goccy/go-yaml) v1.19.2               | 12710 ns/op |  21456 B/op | 488 allocs/op |
+| [kubernetes-sigs/yaml](https://github.com/kubernetes-sigs/yaml) v1.6.0  |  9631 ns/op |  13799 B/op | 238 allocs/op |
 
 ## TOML
 

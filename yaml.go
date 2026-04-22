@@ -12,11 +12,13 @@ package tojson
 import "bytes"
 
 func yamlConvert(input []byte) ([]byte, error) {
-	p := newParser(input)
+	var p parser
+	p.init(input)
 	if len(p.lines) == 0 {
 		return []byte("null"), nil
 	}
 	var buf bytes.Buffer
+	buf.Grow(len(input) + 64)
 	if err := p.parseBlock(-1, &buf); err != nil {
 		return nil, err
 	}
@@ -39,15 +41,38 @@ type pline struct {
 	content []byte // leading whitespace stripped, trailing whitespace stripped
 }
 
-func newParser(input []byte) *parser {
-	rawLines := bytes.Split(input, []byte{'\n'})
-	// bytes.Split on a \n-terminated input adds a spurious trailing empty
-	// element; remove it so it isn't mistaken for a blank line in block scalars.
+// init populates p from input. Kept as a method so yamlConvert can declare
+// parser on the stack and avoid the &parser{} heap escape.
+func (p *parser) init(input []byte) {
+	// Count newlines for pre-allocation — avoids repeated slice growth.
+	n := bytes.Count(input, []byte{'\n'}) + 1
+
+	// Build rawLines without bytes.Split to avoid genSplit's backing alloc;
+	// pre-allocate with n so we get exactly one allocation.
+	// We must match bytes.Split semantics: always emit one element after the
+	// last separator, even when it is empty (so "a\n" → ["a",""] not ["a"]).
+	rawLines := make([][]byte, 0, n)
+	remaining := input
+	for {
+		i := bytes.IndexByte(remaining, '\n')
+		if i < 0 {
+			rawLines = append(rawLines, remaining)
+			break
+		}
+		rawLines = append(rawLines, remaining[:i])
+		remaining = remaining[i+1:]
+		if len(remaining) == 0 {
+			rawLines = append(rawLines, remaining) // trailing empty matches bytes.Split
+			break
+		}
+	}
+	// Remove spurious trailing empty element from a \n-terminated input.
 	if len(rawLines) > 0 && len(rawLines[len(rawLines)-1]) == 0 {
 		rawLines = rawLines[:len(rawLines)-1]
 	}
-	var lines []pline
-	var rawIdx []int
+
+	lines := make([]pline, 0, n)
+	rawIdx := make([]int, 0, n)
 	for i, raw := range rawLines {
 		s := bytes.TrimRight(raw, " \t\r")
 		if len(s) == 0 {
@@ -69,7 +94,9 @@ func newParser(input []byte) *parser {
 		lines = append(lines, pline{indent: indent, content: content})
 		rawIdx = append(rawIdx, i)
 	}
-	return &parser{lines: lines, rawLines: rawLines, rawIdx: rawIdx}
+	p.lines = lines
+	p.rawLines = rawLines
+	p.rawIdx = rawIdx
 }
 
 func (p *parser) peek() (pline, bool) {
