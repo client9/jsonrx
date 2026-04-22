@@ -97,7 +97,7 @@ func appendRecodeString(dst []byte, src []byte) []byte {
 		if n > utf8.UTFMax {
 			n = utf8.UTFMax
 		}
-		c, size := utf8.DecodeRuneInString(string(src[i : i+n]))
+		c, size := utf8.DecodeRune(src[i : i+n])
 		if c == utf8.RuneError && size == 1 {
 			dst = append(dst, src[start:i]...)
 			dst = append(dst, `\ufffd`...)

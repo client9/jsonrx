@@ -10,10 +10,14 @@ import (
 	"testing"
 )
 
+var frontmatter1JSONBytes = []byte(frontmatter1JSON)
+var frontmatter1YAMLBytes = []byte(frontmatter1YAML)
+var frontmatter1TOMLBytes = []byte(frontmatter1TOML)
+
 func BenchmarkFromJSONVariantOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := FromJSONVariant([]byte(frontmatter1JSON)); err != nil {
+		if _, err := FromJSONVariant(frontmatter1JSONBytes); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -21,7 +25,7 @@ func BenchmarkFromJSONVariantOnly(b *testing.B) {
 func BenchmarkFromYAMLOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := FromYAML([]byte(frontmatter1YAML)); err != nil {
+		if _, err := FromYAML(frontmatter1YAMLBytes); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -59,7 +63,7 @@ weight = 10
 func BenchmarkFromTOMLOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := FromTOML([]byte(frontmatter1TOML)); err != nil {
+		if _, err := FromTOML(frontmatter1TOMLBytes); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -68,7 +72,7 @@ func BenchmarkFromTOMLOnly(b *testing.B) {
 func BenchmarkFromTOMLStreamOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := fromTOMLStreaming([]byte(frontmatter1TOML)); err != nil {
+		if _, err := fromTOMLStreaming(frontmatter1TOMLBytes); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -77,7 +81,7 @@ func BenchmarkFromTOMLStreamOnly(b *testing.B) {
 func BenchmarkFromTOMLTreeOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := fromTOMLTree([]byte(frontmatter1TOML)); err != nil {
+		if _, err := fromTOMLTree(frontmatter1TOMLBytes); err != nil {
 			b.Fatal(err)
 		}
 	}

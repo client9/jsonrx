@@ -218,7 +218,7 @@ func (tx *tokenizer) commentSingle() (token, error) {
 			return t, nil
 		}
 	}
-	tx.data = []byte{}
+	tx.data = nil
 	return t, nil
 }
 
@@ -258,7 +258,7 @@ func (tx *tokenizer) hexnumber() (token, error) {
 		col:   tx.col,
 	}
 	tx.col += len(tx.data)
-	tx.data = []byte{}
+	tx.data = nil
 	return t, nil
 }
 func (tx *tokenizer) number() (token, error) {
@@ -305,7 +305,7 @@ func (tx *tokenizer) number() (token, error) {
 		col:   tx.col,
 	}
 	tx.col += len(tx.data)
-	tx.data = []byte{}
+	tx.data = nil
 	return t, nil
 }
 
@@ -333,6 +333,6 @@ func (tx *tokenizer) bareword() (token, error) {
 		col:   tx.col,
 	}
 	tx.col += len(tx.data)
-	tx.data = []byte{}
+	tx.data = nil
 	return t, nil
 }

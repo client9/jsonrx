@@ -29,18 +29,20 @@ func isNaN(b []byte) bool {
 }
 
 type decoder struct {
-	tok     *tokenizer
-	out     *bytes.Buffer
-	stack   []byte
-	next    stateFunction
-	lastRow int
-	lastCol int
+	tok      tokenizer
+	buf      bytes.Buffer // embedded output; FromJSONVariant sets out = &buf
+	out      *bytes.Buffer
+	stack    []byte
+	stackbuf [8]byte // inline backing for stack; avoids a heap alloc at typical nesting depths
+	next     stateFunction
+	lastRow  int
+	lastCol  int
 }
 
 type stateFunction func(d *decoder, t token) error
 
 func (d *decoder) Translate(src []byte) error {
-	d.tok = newTokenizer(src)
+	d.tok = tokenizer{data: src}
 	d.next = stateValue
 
 	for {
@@ -527,23 +529,15 @@ func writeString(out *bytes.Buffer, src []byte) {
 }
 
 func writeQuoted(out *bytes.Buffer, src []byte) {
-	/*
-		hasEscape := false
-		for _, b := range src {
-			if b < utf8.RuneSelf && !safeSet[b] {
-				hasEscape = true
-				break
-			}
-		}
-
-		if !hasEscape {
-			out.WriteByte('"')
-			out.Write(src)
-			out.WriteByte('"')
+	for _, b := range src {
+		if b < utf8.RuneSelf && !safeSet[b] {
+			buf := out.AvailableBuffer()
+			buf = appendString(buf, src)
+			out.Write(buf)
 			return
 		}
-	*/
-	buf := out.AvailableBuffer()
-	buf = appendString(buf, src)
-	out.Write(buf)
+	}
+	out.WriteByte('"')
+	out.Write(src)
+	out.WriteByte('"')
 }
