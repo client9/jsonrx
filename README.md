@@ -1,6 +1,6 @@
 # tojson
 
-Convert YAML, TOML, and JSON variants to standard JSON bytes — no dependencies, no reflection, one decode path.
+Convert YAML, TOML, and JSON variants into standard JSON bytes, then unmarshal with Go's `encoding/json`.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/client9/tojson.svg)](https://pkg.go.dev/github.com/client9/tojson)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,13 +8,14 @@ Convert YAML, TOML, and JSON variants to standard JSON bytes — no dependencies
 
 ## Why
 
-- **Zero dependencies** — stdlib only, nothing added to your module graph
-- **One decode path** — all formats produce JSON bytes; unmarshal with `encoding/json` as usual
-- **Only `json` struct tags** — no separate `yaml` or `toml` tags needed
-- **Lean performance** — on typical frontmatter-style inputs, YAML conversion benchmarked at 3x-5x faster with 3x-5x less memory than common Go YAML packages; TOML used about 2x
-  less memory in our tests. See [performance notes](docs/performance.md).
+- Zero dependencies. `tojson` uses the Go standard library only.
+- One decode path. Every supported format becomes plain JSON bytes.
+- One set of struct tags. Use `json` tags only.
+- Smaller scope than full YAML tooling. That keeps the implementation lean and predictable.
 
-## Install
+Typical use case: accept a human-friendly config format, convert it to JSON, then reuse the normal Go JSON ecosystem for decoding and validation.
+
+## Quick Start
 
 Requires Go 1.24+.
 
@@ -22,14 +23,77 @@ Requires Go 1.24+.
 go get github.com/client9/tojson
 ```
 
-## How It Works
-
-Every `From*` function converts the source bytes to standard JSON, then you unmarshal normally:
-
 ```go
-raw, err := tojson.FromYAML(src)   // → compact JSON bytes
-json.Unmarshal(raw, &cfg)          // standard encoding/json
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+
+	"github.com/client9/tojson"
+)
+
+type Config struct {
+	Name   string `json:"name"`
+	Port   int    `json:"port"`
+	Active bool   `json:"active"`
+}
+
+func main() {
+	src := []byte("name: demo\nport: 8080\nactive: true\n")
+
+	raw, err := tojson.FromYAML(src)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("%+v\n", cfg)
+}
 ```
+
+## Supported Inputs
+
+### JSON variants
+
+`FromJSONVariant` accepts standard JSON plus common JSON-derived extensions, including:
+
+- comments (`//`, `/* */`, `#`)
+- trailing commas
+- unquoted object keys
+- single-quoted and backtick strings
+- hex numbers such as `0x2a`
+
+This is intended for JSON5, JWCC, HuJSON, JSONC, and HanSON-style inputs that should normalize to strict JSON.
+
+### YAML
+
+`FromYAML` supports a practical YAML subset aimed at config files and frontmatter.
+
+Supported well:
+
+- mappings with string keys
+- sequences
+- flow collections (`{}` and `[]`)
+- quoted and plain scalars
+- block scalars
+
+Not supported:
+
+- anchors and aliases
+- tags
+- complex keys (`? ...`)
+
+If you need full YAML spec coverage, this package is the wrong tool.
+
+### TOML
+
+`FromTOML` accepts valid TOML documents and converts them to standard JSON bytes.
 
 ## API
 
@@ -39,30 +103,11 @@ tojson.FromYAML(src []byte) ([]byte, error)
 tojson.FromTOML(src []byte) ([]byte, error)
 ```
 
-## Usage
+All functions return compact JSON on success.
 
-### Basic example
-
-```go
-type Config struct {
-	Name   string `json:"name"`
-	Port   int    `json:"port"`
-	Active bool   `json:"active"`
-}
-
-src := []byte("name: demo\nport: 8080\nactive: true\n")
-
-raw, err := tojson.FromYAML(src)
-// raw → {"name":"demo","port":8080,"active":true}
-
-var cfg Config
-json.Unmarshal(raw, &cfg)
-// cfg → {Name:demo Port:8080 Active:true}
-```
+## Examples
 
 ### JSON variants
-
-`FromJSONVariant` accepts standard JSON plus JSON5, JWCC, HuJSON, JSONC, and HanSON — any input with comments, unquoted keys, trailing commas, hex literals, or single-quoted strings.
 
 ```go
 src := []byte(`
@@ -75,12 +120,14 @@ src := []byte(`
 `)
 
 raw, err := tojson.FromJSONVariant(src)
-// raw → {"unquoted":"value","hex":42,"trailing":[1,2,3]}
+if err != nil {
+	log.Fatal(err)
+}
+
+// raw == {"unquoted":"value","hex":42,"trailing":[1,2,3]}
 ```
 
 ### YAML
-
-> **Subset only.** Anchors, aliases, tags, and complex keys (`? ...`) are not supported.
 
 ```go
 type Config struct {
@@ -96,15 +143,17 @@ tags:
 `)
 
 raw, err := tojson.FromYAML(src)
-// raw → {"title":"Hello","tags":["go","yaml"]}
+if err != nil {
+	log.Fatal(err)
+}
 
 var cfg Config
-json.Unmarshal(raw, &cfg)
+if err := json.Unmarshal(raw, &cfg); err != nil {
+	log.Fatal(err)
+}
 ```
 
 ### TOML
-
-Accepts any valid TOML document.
 
 ```go
 type Config struct {
@@ -118,15 +167,19 @@ port = 8080
 `)
 
 raw, err := tojson.FromTOML(src)
-// raw → {"title":"demo","port":8080}
+if err != nil {
+	log.Fatal(err)
+}
 
 var cfg Config
-json.Unmarshal(raw, &cfg)
+if err := json.Unmarshal(raw, &cfg); err != nil {
+	log.Fatal(err)
+}
 ```
 
-## Error handling
+## Error Handling
 
-All functions return `*tojson.ParseError` on failure, with a 1-based line number and, when available, a 1-based column number. When the column is not available, `ParseError.Column` is `0`.
+Parse failures are returned as `*tojson.ParseError`, which includes a 1-based line number and, when available, a 1-based column number.
 
 ```go
 _, err := tojson.FromJSONVariant([]byte("{ unclosed: [1, 2, }"))
@@ -138,19 +191,29 @@ if err != nil {
 }
 ```
 
+If a column is not available, `ParseError.Column` is `0`.
+
+## Performance
+
+On frontmatter-style benchmark inputs in this repo, `FromYAML` used substantially less memory and was several times faster than common Go YAML packages. `FromTOML` used about half the memory of the TOML packages tested, with speed roughly comparable to `pelletier/go-toml` and faster than `BurntSushi/toml`.
+
+See [docs/performance.md](docs/performance.md) for benchmark methodology, exact library comparisons, and raw numbers.
+
 ## CLI
 
-A `tojson` command is included for testing and scripting:
+The repo also includes a `tojson` command for testing and scripting:
 
 ```bash
 go install github.com/client9/tojson/cmd/tojson@latest
 
-tojson file.yaml          # infer format from extension
+tojson file.yaml
 tojson file.toml
 tojson file.json5
-cat file.yaml | tojson -f yaml    # explicit format for stdin
-tojson -pretty file.yaml          # pretty-printed output
+cat file.yaml | tojson -f yaml
+tojson -pretty file.yaml
 ```
+
+Use `-f` when reading from stdin so the input format is explicit.
 
 ## License
 
