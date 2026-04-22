@@ -84,8 +84,7 @@ Supported well:
 - sequences
 - flow collections (`{}` and `[]`)
 - quoted and plain scalars
-- multiline strings
-- block scalars
+- multi-line strings ('>' and '|')
 
 Not supported:
 
