@@ -3,10 +3,10 @@ package tojson
 import "fmt"
 
 // ParseError is returned by FromJSONVariant, FromYAML, and FromTOML when the input
-// cannot be parsed. Line and Column are 1-based; Column is 0 when not available.
+// cannot be parsed. Line and Column are 1-based.
 type ParseError struct {
 	Line    int    // 1-based line number in the original input
-	Column  int    // 1-based column number; 0 means not available
+	Column  int    // 1-based column number
 	Message string // description of the problem
 }
 
