@@ -69,7 +69,7 @@ func BenchmarkFromStdlibJSON(b *testing.B) {
 func BenchmarkFromJSONVariant(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		raw, err := tojson.FromYAML([]byte(frontmatter1JSON))
+		raw, err := tojson.FromJSONVariant([]byte(frontmatter1JSON))
 		if err != nil {
 			b.Fatal(err)
 		}
