@@ -106,6 +106,22 @@ tojson.FromTOML(src []byte) ([]byte, error)
 
 All functions return compact JSON on success.
 
+### Error Handling
+
+Parse failures are returned as `*tojson.ParseError`, which includes a 1-based line number and, when available, a 1-based column number.
+
+```go
+_, err := tojson.FromJSONVariant([]byte("{ unclosed: [1, 2, }"))
+if err != nil {
+	var pe *tojson.ParseError
+	if errors.As(err, &pe) {
+		log.Printf("parse error at line %d, col %d: %s", pe.Line, pe.Column, pe.Message)
+	}
+}
+```
+
+If a column is not available, `ParseError.Column` is `0`.
+
 ## Examples
 
 ### JSON variants
@@ -177,22 +193,6 @@ if err := json.Unmarshal(raw, &cfg); err != nil {
 	log.Fatal(err)
 }
 ```
-
-## Error Handling
-
-Parse failures are returned as `*tojson.ParseError`, which includes a 1-based line number and, when available, a 1-based column number.
-
-```go
-_, err := tojson.FromJSONVariant([]byte("{ unclosed: [1, 2, }"))
-if err != nil {
-	var pe *tojson.ParseError
-	if errors.As(err, &pe) {
-		log.Printf("parse error at line %d, col %d: %s", pe.Line, pe.Column, pe.Message)
-	}
-}
-```
-
-If a column is not available, `ParseError.Column` is `0`.
 
 ## Performance
 
