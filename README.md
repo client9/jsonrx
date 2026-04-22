@@ -8,10 +8,11 @@ Convert YAML, TOML, and JSON variants into standard JSON bytes, then unmarshal w
 
 ## Why
 
+- One library for the configuration and frontmatter formats you are most likely to encounter.
 - Zero dependencies. `tojson` uses the Go standard library only.
-- One decode path. Every supported format becomes plain JSON bytes.
-- One set of struct tags. Use `json` tags only.
-- Smaller scope than full YAML tooling. That keeps the implementation lean and predictable.
+- Convert everything to JSON bytes, then use the normal Go JSON ecosystem for unmarshaling, validation, and downstream tooling.
+- No custom marshaling layer. Use `json` struct tags only.
+- Standardized API and error handling across all supported formats.
 
 Typical use case: accept a human-friendly config format, convert it to JSON, then reuse the normal Go JSON ecosystem for decoding and validation.
 
