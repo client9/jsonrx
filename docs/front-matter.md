@@ -79,3 +79,18 @@ NOTE: this works since YAML is a superset of JSON.  It will be parsed with a YAM
 const var fruit = "apple";
 ---
 ```
+
+### Triple SemiColor for JSON
+
+As seen in [adrg/frontmatter](https://github.com/adrg/frontmatter) (Go):
+
+```
+;;;
+{
+	"fruit": "apple"
+}
+;;;
+```
+
+Easy to add if this is common.
+
