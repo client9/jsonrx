@@ -3,7 +3,7 @@ package tojson
 // FromJSONVariant converts JSON and common JSON-derived variants to standard JSON.
 // It handles JSON5/HuJSON/JWCC/JSONC/HanSON features such as trailing/leading
 // commas, line and block comments, unquoted keys, single-quoted and backtick
-// strings, hex literals, and non-finite numbers.
+// strings, and hex literals.
 func FromJSONVariant(src []byte) ([]byte, error) {
 	d := &decoder{}
 	d.out = &d.buf
