@@ -52,6 +52,29 @@ func ExampleFromJSONVariant() {
 	// {"unquoted":"value","hex":42,"trailing":[1,2,3]}
 }
 
+func ExampleFromTOML() {
+	type Article struct {
+		Title  string `json:"title"`
+		Author string `json:"author"`
+	}
+
+	src := []byte("title = \"hello-world\"\nauthor = \"alice\"\n")
+
+	raw, err := tojson.FromTOML(src)
+	if err != nil {
+		panic(err)
+	}
+
+	var article Article
+	if err := json.Unmarshal(raw, &article); err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%+v\n", article)
+	// Output:
+	// {Title:hello-world Author:alice}
+}
+
 func ExampleFromFrontMatter() {
 	type Article struct {
 		Title  string `json:"title"`
