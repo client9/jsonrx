@@ -98,15 +98,35 @@ If you need full YAML spec coverage or YAML AST manipulations, this package is t
 
 `FromTOML` accepts valid TOML documents and converts them to standard JSON bytes.
 
+### Front matter
+
+`FromFrontMatter` handles documents that embed metadata before the main content, as used by Hugo, Jekyll, and similar static site generators. It detects the format from the opening sentinel line, converts the metadata block to JSON, and returns the metadata and body separately.
+
+Supported sentinel pairs:
+
+| Opening    | Closing | Format |
+|------------|---------|--------|
+| `---`      | `---`   | YAML   |
+| `---yaml`  | `---`   | YAML   |
+| `---toml`  | `---`   | TOML   |
+| `---json`  | `---`   | JSON   |
+| `+++`      | `+++`   | TOML   |
+| `{`        | `}`     | JSON   |
+
+Trailing whitespace on sentinel lines is ignored. An unrecognised `---<qualifier>` returns an error (e.g. `---yml` is caught as a typo). A missing closing sentinel is also an error — silently treating the remainder as body risks leaking private metadata fields into published content.
+
+If no recognised opening sentinel is found, `meta` is nil and `body` is the full input.
+
 ## API
 
 ```go
 tojson.FromJSONVariant(src []byte) ([]byte, error)
 tojson.FromYAML(src []byte) ([]byte, error)
 tojson.FromTOML(src []byte) ([]byte, error)
+tojson.FromFrontMatter(src []byte) (meta []byte, body []byte, err error)
 ```
 
-All functions return compact JSON on success.
+`FromJSONVariant`, `FromYAML`, and `FromTOML` return compact JSON on success. `FromFrontMatter` returns compact JSON metadata and the raw body bytes; meta is nil when no front matter is present.
 
 ### Error Handling
 
@@ -192,6 +212,37 @@ var article Article
 if err := json.Unmarshal(raw, &article); err != nil {
 	log.Fatal(err)
 }
+```
+
+### Front matter
+
+```go
+type Article struct {
+	Title  string `json:"title"`
+	Author string `json:"author"`
+}
+
+src := []byte(`---
+title: Hello World
+author: alice
+---
+This is the body.
+`)
+
+meta, body, err := tojson.FromFrontMatter(src)
+if err != nil {
+	log.Fatal(err)
+}
+
+if meta != nil {
+	var article Article
+	if err := json.Unmarshal(meta, &article); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// body == []byte("This is the body.\n")
+_ = body
 ```
 
 ## Performance

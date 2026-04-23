@@ -52,6 +52,33 @@ func ExampleFromJSONVariant() {
 	// {"unquoted":"value","hex":42,"trailing":[1,2,3]}
 }
 
+func ExampleFromFrontMatter() {
+	type Article struct {
+		Title  string `json:"title"`
+		Author string `json:"author"`
+	}
+
+	src := []byte("---\ntitle: Hello World\nauthor: alice\n---\nThis is the body.\n")
+
+	meta, body, err := tojson.FromFrontMatter(src)
+	if err != nil {
+		panic(err)
+	}
+
+	var article Article
+	if err := json.Unmarshal(meta, &article); err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("title: %s\n", article.Title)
+	fmt.Printf("author: %s\n", article.Author)
+	fmt.Printf("body: %s", body)
+	// Output:
+	// title: Hello World
+	// author: alice
+	// body: This is the body.
+}
+
 func ExampleParseError() {
 	_, err := tojson.FromJSONVariant([]byte("{ unclosed: [1, 2, }"))
 	if err != nil {
