@@ -163,6 +163,37 @@ func TestTOMLMixedTableAndAoT(t *testing.T) {
 		`{"a":{"x":1,"items":[{"name":"A"},{"name":"B"}]}}`)
 }
 
+// Out-of-order AoT: [[section]] reappears after an intervening [other] section,
+// which closes the first section and prevents the streaming path from handling
+// the re-entry. These tests exercise the tree-based fallback (tomlConvertTree).
+
+func TestTOMLAoTOutOfOrder(t *testing.T) {
+	roundtripTOML(t,
+		"[[a]]\nx = 1\n[b]\ny = 2\n[[a]]\nx = 2",
+		`{"a":[{"x":1},{"x":2}],"b":{"y":2}}`)
+}
+
+func TestTOMLAoTOutOfOrderStrings(t *testing.T) {
+	// string values exercise scalarStringNode via parseTOMLValue in tree path
+	roundtripTOML(t,
+		"[[items]]\nname = \"hammer\"\n[meta]\nv = 1\n[[items]]\nname = \"nail\"",
+		`{"items":[{"name":"hammer"},{"name":"nail"}],"meta":{"v":1}}`)
+}
+
+func TestTOMLAoTOutOfOrderInlineArray(t *testing.T) {
+	// inline array values exercise parseTOMLInlineArray via parseTOMLValue in tree path
+	roundtripTOML(t,
+		"[[items]]\nnums = [1, 2, 3]\n[meta]\nv = 1\n[[items]]\nnums = [4, 5]",
+		`{"items":[{"nums":[1,2,3]},{"nums":[4,5]}],"meta":{"v":1}}`)
+}
+
+func TestTOMLTableAfterAoTReentry(t *testing.T) {
+	// [a] after [[a]] in the tree path enters the last aot element as context
+	roundtripTOML(t,
+		"[[a]]\nx = 1\n[b]\ny = 2\n[a]\nz = 3",
+		`{"a":[{"x":1,"z":3}],"b":{"y":2}}`)
+}
+
 // --------------------------------------------------------------------------
 // Inline tables
 // --------------------------------------------------------------------------
@@ -278,6 +309,30 @@ func TestTOMLErrorInvalidEscape(t *testing.T) {
 func TestTOMLErrorInlineTableTrailingComma(t *testing.T) {
 	if _, err := FromTOML([]byte(`t = {a = 1,}`)); err == nil {
 		t.Error("expected error for trailing comma in inline table")
+	}
+}
+
+// --------------------------------------------------------------------------
+// Path-specific helpers
+// --------------------------------------------------------------------------
+
+func TestTOMLFromTOMLStreaming(t *testing.T) {
+	got, err := fromTOMLStreaming([]byte("k = 1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"k":1}` {
+		t.Errorf("got %q, want %q", got, `{"k":1}`)
+	}
+}
+
+func TestTOMLFromTOMLTree(t *testing.T) {
+	got, err := fromTOMLTree([]byte("k = 1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"k":1}` {
+		t.Errorf("got %q, want %q", got, `{"k":1}`)
 	}
 }
 
