@@ -35,26 +35,26 @@ import (
 	"github.com/client9/tojson"
 )
 
-type Config struct {
-	Name   string `json:"name"`
-	Port   int    `json:"port"`
-	Active bool   `json:"active"`
+type Article struct {
+	Title  string `json:"title"`
+	Author string `json:"author"`
+	Draft  bool   `json:"draft"`
 }
 
 func main() {
-	src := []byte("name: demo\nport: 8080\nactive: true\n")
+	src := []byte("title: hello-world\nauthor: alice\ndraft: false\n")
 
 	raw, err := tojson.FromYAML(src)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var cfg Config
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	var article Article
+	if err := json.Unmarshal(raw, &article); err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%+v\n", cfg)
+	fmt.Printf("%+v\n", article)
 }
 ```
 
@@ -147,7 +147,7 @@ if err != nil {
 ### YAML
 
 ```go
-type Config struct {
+type Article struct {
 	Title string   `json:"title"`
 	Tags  []string `json:"tags"`
 }
@@ -164,8 +164,8 @@ if err != nil {
 	log.Fatal(err)
 }
 
-var cfg Config
-if err := json.Unmarshal(raw, &cfg); err != nil {
+var article Article
+if err := json.Unmarshal(raw, &article); err != nil {
 	log.Fatal(err)
 }
 ```
@@ -173,14 +173,14 @@ if err := json.Unmarshal(raw, &cfg); err != nil {
 ### TOML
 
 ```go
-type Config struct {
-	Title string `json:"title"`
-	Port  int    `json:"port"`
+type Article struct {
+	Title  string `json:"title"`
+	Author string `json:"author"`
 }
 
 src := []byte(`
-title = "demo"
-port = 8080
+title = "hello-world"
+author = "alice"
 `)
 
 raw, err := tojson.FromTOML(src)
@@ -188,8 +188,8 @@ if err != nil {
 	log.Fatal(err)
 }
 
-var cfg Config
-if err := json.Unmarshal(raw, &cfg); err != nil {
+var article Article
+if err := json.Unmarshal(raw, &article); err != nil {
 	log.Fatal(err)
 }
 ```

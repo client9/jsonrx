@@ -9,27 +9,27 @@ import (
 )
 
 func ExampleFromYAML() {
-	type Config struct {
-		Name   string `json:"name"`
-		Port   int    `json:"port"`
-		Active bool   `json:"active"`
+	type Article struct {
+		Title  string `json:"title"`
+		Author string `json:"author"`
+		Draft  bool   `json:"draft"`
 	}
 
-	src := []byte("name: demo\nport: 8080\nactive: true\n")
+	src := []byte("title: hello-world\nauthor: alice\ndraft: false\n")
 
 	raw, err := tojson.FromYAML(src)
 	if err != nil {
 		panic(err)
 	}
 
-	var cfg Config
-	if err := json.Unmarshal(raw, &cfg); err != nil {
+	var article Article
+	if err := json.Unmarshal(raw, &article); err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("%+v\n", cfg)
+	fmt.Printf("%+v\n", article)
 	// Output:
-	// {Name:demo Port:8080 Active:true}
+	// {Title:hello-world Author:alice Draft:false}
 }
 
 func ExampleFromJSONVariant() {
