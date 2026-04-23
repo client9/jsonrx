@@ -1,8 +1,10 @@
-// tojson converts JSON5/YAML/TOML from a file or stdin to JSON on stdout.
+// tojson converts YAML/TOML/JSON variants and front matter from a file or
+// stdin to JSON on stdout.
 //
 // Usage:
 //
 //	tojson file.yaml          # format inferred from extension
+//	tojson file.md            # front matter extracted, meta JSON printed
 //	cat file.yaml | tojson -f yaml
 //	tojson -pretty file.yaml  # pretty-printed JSON
 //	tojson -compact file.yaml # explicit compact JSON
@@ -35,6 +37,15 @@ func convert(format string, input []byte) ([]byte, error) {
 		return tojson.FromTOML(input)
 	case "json5", "json", "jsonc", "hjson", "hson":
 		return tojson.FromJSONVariant(input)
+	case "md", "markdown", "frontmatter":
+		meta, _, err := tojson.FromFrontMatter(input)
+		if err != nil {
+			return nil, err
+		}
+		if meta == nil {
+			meta = []byte("{}")
+		}
+		return meta, nil
 	default:
 		return nil, fmt.Errorf("unknown format %q", format)
 	}
