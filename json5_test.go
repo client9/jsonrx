@@ -23,8 +23,12 @@ func TestJson5Json(t *testing.T) {
 		"positive-hexadecimal.json5",
 		"positive-zero-hexadecimal.json5",
 
-		/* NaN is TBD */
+		/* NaN and Infinity are not representable in JSON — error */
 		"nan.json5",
+		"infinity.json5",
+		"negative-infinity.json5",
+		"positive-infinity.json5",
+		"readme-example.json5",
 
 		/* This isn't JSON5 (or JSON) but allowed in JS */
 		/* negative with leading zeros, e.g. -001       */

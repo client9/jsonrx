@@ -148,18 +148,6 @@ func TestDecodeNumbers(t *testing.T) {
 			"0xFF",
 			"255",
 		},
-		{
-			"Infinity",
-			"9007199254740991",
-		},
-		{
-			"+Infinity",
-			"9007199254740991",
-		},
-		{
-			"-Infinity",
-			"-9007199254740992",
-		},
 		// large integer → falls through to writeFloat and normalizes
 		{"+99999999999999999", "1e+17"},
 		// hex: full uint64 range
@@ -285,18 +273,23 @@ func TestDecodeErrors(t *testing.T) {
 	}
 }
 
-func TestDecodeNaN(t *testing.T) {
+func TestDecodeNaNAndInfinity(t *testing.T) {
 	cases := []string{
 		"NaN",
 		"+NaN",
 		"-NaN",
 		`{"x":NaN}`,
 		`[1,NaN,2]`,
+		"Infinity",
+		"+Infinity",
+		"-Infinity",
+		`{"x":Infinity}`,
+		`[1,Infinity,2]`,
 	}
 	for _, in := range cases {
 		_, err := FromJSONVariant([]byte(in))
 		if err == nil {
-			t.Errorf("Decode(%q): expected error for NaN, got nil", in)
+			t.Errorf("Decode(%q): expected error, got nil", in)
 		}
 	}
 }

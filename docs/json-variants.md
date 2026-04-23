@@ -17,11 +17,10 @@ Convert alternative JSON formats back to spec so you can get on with your life.
 - [x] Remove '+' sign from integers (JSON5)
 - [x] Remove leading zeros from numbers, e.g. "01"
 - [x] Normalize floats ".5" to "0.5", "5." to "5"
-- [x] Convert [+/-]Infinity to [+/-]2^53 -1 (largest/smallest possible integer)
 - [x] Normalize string escape sequences
 - [x] Convert "\r\n" to "\n"
 - [x] Convert \x?? hex escapes
-- [x] NaN is an error (not representable in JSON)
+- [x] NaN and Infinity are errors (not representable in JSON)
 
 ## Supported JSON Variants
 

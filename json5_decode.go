@@ -8,15 +8,8 @@ import (
 	"unicode/utf8"
 )
 
-// from Javascript
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MIN_SAFE_INTEGER
-//
-//	Number.MaxSafeInteger
-//	Number.MinSafeInteger
 var bareInfinity = []byte("Infinity")
 var bareNaN = []byte("NaN")
-var maxSafeInteger = []byte("9007199254740991")
-var minSafeInteger = []byte("-9007199254740992")
 
 func isNaN(b []byte) bool {
 	if len(b) == 3 {
@@ -24,6 +17,16 @@ func isNaN(b []byte) bool {
 	}
 	if len(b) == 4 && (b[0] == '+' || b[0] == '-') {
 		return bytes.Equal(b[1:], bareNaN)
+	}
+	return false
+}
+
+func isInfinity(b []byte) bool {
+	if bytes.Equal(b, bareInfinity) {
+		return true
+	}
+	if len(b) > 1 && (b[0] == '+' || b[0] == '-') {
+		return bytes.Equal(b[1:], bareInfinity)
 	}
 	return false
 }
@@ -96,8 +99,8 @@ func stateValue(d *decoder, t token) error {
 		}
 		d.next = stateObjectAfterValue
 	case 'w':
-		if isNaN(t.value) {
-			return atToken(t, fmt.Errorf("NaN is not valid JSON"))
+		if isNaN(t.value) || isInfinity(t.value) {
+			return atToken(t, fmt.Errorf("%s is not representable in JSON", t.value))
 		}
 		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
@@ -157,8 +160,8 @@ func stateObjectValue(d *decoder, t token) error {
 		writeString(d.out, t.value)
 		d.next = stateObjectAfterValue
 	case 'w':
-		if isNaN(t.value) {
-			return atToken(t, fmt.Errorf("NaN is not valid JSON"))
+		if isNaN(t.value) || isInfinity(t.value) {
+			return atToken(t, fmt.Errorf("%s is not representable in JSON", t.value))
 		}
 		bareword(d.out, t.value)
 		d.next = stateObjectAfterValue
@@ -304,8 +307,8 @@ func stateArrayValue(d *decoder, t token) error {
 		writeString(d.out, t.value)
 		d.next = stateArrayAfterValue
 	case 'w':
-		if isNaN(t.value) {
-			return atToken(t, fmt.Errorf("NaN is not valid JSON"))
+		if isNaN(t.value) || isInfinity(t.value) {
+			return atToken(t, fmt.Errorf("%s is not representable in JSON", t.value))
 		}
 		bareword(d.out, t.value)
 		d.next = stateArrayAfterValue
@@ -470,17 +473,6 @@ func bareword(out *bytes.Buffer, b []byte) {
 		out.Write(b)
 		return
 	}
-
-	if bytes.Equal(bareInfinity, b) || (b[0] == '+' && bytes.Equal(bareInfinity, b[1:])) {
-		out.Write(maxSafeInteger)
-		return
-	}
-	if b[0] == '-' && bytes.Equal(bareInfinity, b[1:]) {
-		out.Write(minSafeInteger)
-		return
-	}
-
-	// something else
 	out.Write(b)
 }
 
