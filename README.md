@@ -1,6 +1,6 @@
 # tojson
 
-Convert YAML, TOML, and JSON variants into standard JSON bytes, then unmarshal with Go's `encoding/json`.
+Parse YAML, TOML, JSON variants, and document front matter into standard JSON bytes. Zero dependencies, stdlib only.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/client9/tojson.svg)](https://pkg.go.dev/github.com/client9/tojson)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,13 +8,18 @@ Convert YAML, TOML, and JSON variants into standard JSON bytes, then unmarshal w
 
 ## Why
 
-- One library for the configuration and frontmatter formats you are most likely to encounter.
+- One library for the configuration and front matter formats you are most likely to encounter.
 - Zero dependencies. `tojson` uses the Go standard library only.
 - Convert everything to JSON bytes, then use the normal Go JSON ecosystem for unmarshaling, validation, and downstream tooling.
 - No custom marshaling layer. Use `json` struct tags only.
 - Standardized API and error handling across all supported formats.
 
-Typical use case: accept a human-friendly config format, convert it to JSON, then reuse the normal Go JSON ecosystem for decoding and validation.
+Typical use cases:
+
+- High-performance, minimal-dependency YAML config decoding.
+- Static site and content pipelines: parse front matter, decode the metadata, pass the body to a renderer.
+- Accepting "better JSON" that allows comments and trailing commas.
+- Normalizing obsolete JSON variants and recovering broken configurations.
 
 ## Quick Start
 
@@ -57,65 +62,6 @@ func main() {
 	fmt.Printf("%+v\n", article)
 }
 ```
-
-## Supported Inputs
-
-### JSON variants
-
-`FromJSONVariant` accepts standard JSON plus common JSON-derived extensions, including:
-
-- comments (`//`, `/* */`, `#`)
-- trailing commas
-- unquoted object keys
-- single-quoted and backtick strings
-- hex numbers such as `0x2a`
-
-This is intended for JSON5, JWCC, HuJSON, JSONC, and HanSON-style inputs that should normalize to strict JSON.
-
-For more details, see [docs/json-variants.md](docs/json-variants.md).
-
-### YAML
-
-`FromYAML` supports a practical YAML subset aimed at config files and frontmatter.
-
-Supported well:
-
-- mappings with string keys
-- sequences
-- flow collections (`{}` and `[]`)
-- quoted and plain scalars
-- multi-line strings ('>' and '|')
-
-Not supported:
-
-- anchors and aliases
-- tags
-- complex keys (`? ...`)
-
-If you need full YAML spec coverage or YAML AST manipulations, this package is the wrong tool.
-
-### TOML
-
-`FromTOML` accepts valid TOML documents and converts them to standard JSON bytes.
-
-### Front matter
-
-`FromFrontMatter` handles documents that embed metadata before the main content, as used by Hugo, Jekyll, and similar static site generators. It detects the format from the opening sentinel line, converts the metadata block to JSON, and returns the metadata and body separately.
-
-Supported sentinel pairs:
-
-| Opening    | Closing | Format |
-|------------|---------|--------|
-| `---`      | `---`   | YAML   |
-| `---yaml`  | `---`   | YAML   |
-| `---toml`  | `---`   | TOML   |
-| `---json`  | `---`   | JSON   |
-| `+++`      | `+++`   | TOML   |
-| `{`        | `}`     | JSON   |
-
-Trailing whitespace on sentinel lines is ignored. An unrecognised `---<qualifier>` returns an error (e.g. `---yml` is caught as a typo). A missing closing sentinel is also an error — silently treating the remainder as body risks leaking private metadata fields into published content.
-
-If no recognised opening sentinel is found, `meta` is nil and `body` is the full input.
 
 ## API
 
@@ -244,6 +190,12 @@ if meta != nil {
 // body == []byte("This is the body.\n")
 _ = body
 ```
+
+## Supported Inputs
+
+`FromJSONVariant` handles JSON5, JWCC, HuJSON, JSONC, and HanSON-style inputs: comments, trailing commas, unquoted keys, single-quoted strings, hex literals, and more. `FromYAML` supports a practical subset covering mappings, sequences, scalars, and block strings — not anchors, tags, or complex keys. `FromTOML` accepts valid TOML. `FromFrontMatter` detects the format from the opening sentinel (`---`, `+++`, `{`, or qualified variants like `---toml`).
+
+See [docs/supported-inputs.md](docs/supported-inputs.md) for the full breakdown.
 
 ## Performance
 
