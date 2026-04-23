@@ -15,7 +15,7 @@ Summary: Parsing JSON variants adds about 25% overhead over pure `encoding/json`
 
 | Package | Per Call | Memory | Allocations |
 |---------------------------------|------------:|------------:|-------------:|
-| **tojson.FromJSONVariants**     |  2393 ns/op |   1992 B/op | 49 allocs/op |
+| **tojson.FromJSONVariant**      |  2393 ns/op |   1992 B/op | 49 allocs/op |
 | Go `encoding/json`              |  1908 ns/op |   1608 B/op | 47 allocs/op |
 
 
