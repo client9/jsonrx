@@ -721,3 +721,15 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
 }
+
+// fromTOMLStreaming converts TOML to JSON using the single-pass streaming path,
+// without falling back to the tree-based path on section re-entry.
+func fromTOMLStreaming(src []byte) ([]byte, error) {
+	return tomlConvertStreaming(src)
+}
+
+// fromTOMLTree converts TOML to JSON using the tree-based path directly,
+// skipping the streaming attempt.
+func fromTOMLTree(src []byte) ([]byte, error) {
+	return tomlConvertTree(src)
+}
