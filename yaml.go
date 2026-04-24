@@ -1,9 +1,9 @@
 // YAML-to-JSON support. Converts a subset of YAML to JSON without reflection
 // or intermediate data structures.
 //
-// Supported: block mappings, block sequences, flow style, bare/quoted scalars,
-// null/bool literals, simple numbers, nested structures, comments, frontmatter,
-// literal (|) and folded (>) block scalars.
+// Supported: block mappings, block sequences, flow style, bare/quoted strings (scalars),
+// null/bool literals, numbers, nested structures, comments, 
+// literal (|) and folded (>) strings (block scalars).
 //
 // Not supported: anchors & aliases, tags, complex keys (? ...).
 
