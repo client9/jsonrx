@@ -48,7 +48,7 @@ Large values pass through without evaluation — `1e309` stays `1e309`, not `Inf
 
 Controlled by constants in `yaml_scalar.go`:
 
-- [x] Tabs in indentation, counted as N spaces (`yamlTabWidth`, default 2; set to -1 to forbid)
+- [x] Tabs in indentation, counted as N spaces (`yamlTabWidth`, default 2; set to ≤ 0 to forbid)
 - [x] YAML 1.1 boolean aliases: `yes`/`no`/`on`/`off` → `true`/`false` (`yamlBoolAliases`, default on)
 - [ ] `~` as null (`yamlTildeNull`, default off)
 

@@ -11,7 +11,7 @@ import (
 // --------------------------------------------------------------------------
 
 // yamlTabWidth is the number of spaces a tab character counts as when
-// measuring indentation. Set to < 0 to forbid tabs in YAML input entirely.
+// measuring indentation. Set to <= 0 to forbid tabs in YAML input entirely.
 const yamlTabWidth = 2
 
 // yamlBoolAliases controls whether YAML 1.1 boolean aliases are recognised.
@@ -250,7 +250,7 @@ func yamlLeadingIndent(s []byte) (int, error) {
 		if c == ' ' {
 			n++
 		} else if c == '\t' {
-			if yamlTabWidth < 0 {
+			if yamlTabWidth <= 0 {
 				return 0, fmt.Errorf("tab character not allowed in YAML indentation")
 			}
 			n += yamlTabWidth
