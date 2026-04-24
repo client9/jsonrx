@@ -2,7 +2,7 @@
 // or intermediate data structures.
 //
 // Supported: block mappings, block sequences, flow style, bare/quoted strings (scalars),
-// null/bool literals, numbers, nested structures, comments, 
+// null/bool literals, numbers, nested structures, comments,
 // literal (|) and folded (>) strings (block scalars).
 //
 // Not supported: anchors & aliases, tags, complex keys (? ...).
