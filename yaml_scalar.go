@@ -18,13 +18,22 @@ const yamlTabWidth = 2
 // When false, only true/false (and their case variants) are treated as booleans.
 const yamlBoolAliases = true
 
+// yamlTildeNull controls whether bare ~ is treated as null.
+const yamlTildeNull = false
+
 // writeScalar converts a YAML scalar to its JSON representation.
 func writeScalar(s []byte, buf *bytes.Buffer) error {
 	s = bytes.TrimSpace(s)
 	switch string(s) {
-	case "", "null", "~", "Null", "NULL":
+	case "", "null", "Null", "NULL":
 		buf.WriteString("null")
 		return nil
+	}
+	if yamlTildeNull && string(s) == "~" {
+		buf.WriteString("null")
+		return nil
+	}
+	switch string(s) {
 	case "true", "True", "TRUE":
 		buf.WriteString("true")
 		return nil
