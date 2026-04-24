@@ -173,42 +173,22 @@ func applyTOMLEscape(s []byte, i int, b *bytes.Buffer) (int, error) {
 	return 0, nil
 }
 
-// parseTOMLBasicStringRaw parses a TOML basic (double-quoted) string from s[0].
+// parseTOMLBasicStringRaw parses a TOML basic (double-quoted) string from s[0]
+// using Go string literal rules (strconv.Unquote).
 // Returns the decoded bytes and the remainder after the closing quote.
 func parseTOMLBasicStringRaw(s []byte) ([]byte, []byte, error) {
 	if len(s) < 2 || s[0] != '"' {
 		return nil, s, fmt.Errorf("expected double-quoted string")
 	}
-	// Fast path: no escape sequences — return a no-alloc sub-slice.
-	for i := 1; i < len(s); i++ {
-		if s[i] == '"' {
-			return s[1:i], s[i+1:], nil
-		}
-		if s[i] == '\\' {
-			break
-		}
+	end := doubleQuotedEnd(s)
+	if end < 0 {
+		return nil, s, fmt.Errorf("unterminated basic string")
 	}
-	// Slow path: has escape sequences, must decode.
-	var b bytes.Buffer
-	i := 1
-	for i < len(s) {
-		c := s[i]
-		if c == '"' {
-			return b.Bytes(), s[i+1:], nil
-		}
-		if c == '\\' && i+1 < len(s) {
-			i++
-			extra, err := applyTOMLEscape(s, i, &b)
-			if err != nil {
-				return nil, s, err
-			}
-			i += extra
-		} else {
-			b.WriteByte(c)
-		}
-		i++
+	str, err := strconv.Unquote(string(s[:end]))
+	if err != nil {
+		return nil, s, fmt.Errorf("invalid basic string: %w", err)
 	}
-	return nil, s, fmt.Errorf("unterminated basic string")
+	return []byte(str), s[end:], nil
 }
 
 // parseTOMLLiteralStringRaw parses a TOML literal (single-quoted) string from s[0].
