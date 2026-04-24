@@ -1,4 +1,4 @@
-SHELL := dash
+SHELL := sh
 
 .PHONY: help
 .DEFAULT_GOAL := help
