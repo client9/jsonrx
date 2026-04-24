@@ -142,14 +142,14 @@ func TestDecodeNumbers(t *testing.T) {
 		},
 		{
 			"5.",
-			"5",
+			"5.0",
 		},
 		{
 			"0xFF",
 			"255",
 		},
-		// large integer → falls through to writeFloat and normalizes
-		{"+99999999999999999", "1e+17"},
+		// large integer passes through without evaluation
+		{"+99999999999999999", "99999999999999999"},
 		// hex: full uint64 range
 		{"0xFFFFFFFFFFFFFFFF", "18446744073709551615"},
 	}
@@ -170,12 +170,6 @@ func TestDecodeNumberErrors(t *testing.T) {
 	cases := []string{
 		// hex overflow: 2^64, exceeds uint64
 		"0x10000000000000000",
-		// float overflow: +prefix strips JSON validity, value exceeds float64
-		"+1e309",
-		// float overflow in object value
-		`{"x":+1e309}`,
-		// float overflow in array
-		`[+1e309]`,
 		// hex overflow in object value
 		`{"x":0x10000000000000000}`,
 		// hex overflow in array
@@ -185,6 +179,26 @@ func TestDecodeNumberErrors(t *testing.T) {
 		_, err := FromJSONVariant([]byte(in))
 		if err == nil {
 			t.Errorf("FromJSONVariant(%q): expected error, got nil", in)
+		}
+	}
+}
+
+func TestDecodeNumberPassthrough(t *testing.T) {
+	// large floats pass through as-is — no float64 evaluation
+	cases := []testcase{
+		{"+1e309", "1e309"},
+		{`{"x":+1e309}`, `{"x":1e309}`},
+		{`[+1e309]`, `[1e309]`},
+		{"+111111111111111111111123199999999999999999.0", "111111111111111111111123199999999999999999.0"},
+	}
+	for _, tt := range cases {
+		out, err := FromJSONVariant([]byte(tt.in))
+		if err != nil {
+			t.Errorf("FromJSONVariant(%q): unexpected error: %v", tt.in, err)
+			continue
+		}
+		if got := string(out); got != tt.out {
+			t.Errorf("FromJSONVariant(%q): got %q, want %q", tt.in, got, tt.out)
 		}
 	}
 }

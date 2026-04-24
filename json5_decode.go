@@ -383,61 +383,11 @@ func isFalse(b []byte) bool {
 		b[4] == 'e'
 }
 
-func writeInt(out *bytes.Buffer, b0 []byte) error {
-
-	// assert -- should never happen
-	if len(b0) == 0 {
-		return nil
-	}
-
-	b := b0
-	if b[0] == '-' || b[0] == '+' {
-		b = b[1:]
-	}
-	val := uint64(0)
-	overflow := false
-	notint := false
-	for _, c := range b {
-		// here for safety
-		if '0' <= c && c <= '9' {
-			d := uint64(c - '0')
-			val = val*10 + d
-			if val > (1 << 54) {
-				overflow = true
-				break
-			}
-		} else {
-			notint = true
-			break
-		}
-	}
-
-	if overflow {
-		return writeFloat(out, b0)
-	}
-	if notint {
-		bareword(out, b0)
-		return nil
-	}
-
-	b = b0
-	// if we got here, we have a valid integer
-	// just check if we start with a '+' which is un-needed
-	if b[0] == '+' {
-		b = b[1:]
-	}
-
-	// trim off leading zeros
-	for len(b) > 0 && b[0] == '0' {
-		b = b[1:]
-	}
+func writeInt(out *bytes.Buffer, b []byte) error {
 	if len(b) == 0 {
-		// "+00000" or "0000"
-		out.WriteByte('0')
 		return nil
 	}
-
-	out.Write(b)
+	writeNormalizedNumber(out, b)
 	return nil
 }
 
@@ -454,18 +404,11 @@ func writeHex(out *bytes.Buffer, b []byte) error {
 }
 
 func writeFloat(out *bytes.Buffer, b []byte) error {
-	if isValidNumber(b) {
-		out.Write(b)
+	if len(b) == 0 {
 		return nil
 	}
-
-	// https://cs.opensource.google/go/go/+/refs/tags/go1.24.3:src/encoding/json/encode.go
-	num, err := strconv.ParseFloat(string(b), 64)
-	if err == nil {
-		out.WriteString(strconv.FormatFloat(num, 'g', -1, 64))
-		return nil
-	}
-	return fmt.Errorf("number %s overflows float64", b)
+	writeNormalizedNumber(out, b)
+	return nil
 }
 
 func bareword(out *bytes.Buffer, b []byte) {

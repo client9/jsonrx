@@ -186,7 +186,10 @@ func (p *parser) parseMapping(indent int, buf *bytes.Buffer) error {
 		p.consume()
 		rawLine := p.rawIdx[p.pos-1]
 
-		key, rest := splitMapKey(l.content)
+		key, rest, err := splitMapKey(l.content)
+		if err != nil {
+			return err
+		}
 		writeJSONString(key, buf)
 		buf.WriteByte(':')
 
@@ -282,7 +285,10 @@ func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine i
 	buf.WriteByte('{')
 
 	writeKeyValue := func(line []byte, rawLine int, lineCol int) error {
-		key, rest := splitMapKey(line)
+		key, rest, err := splitMapKey(line)
+		if err != nil {
+			return err
+		}
 		writeJSONString(key, buf)
 		buf.WriteByte(':')
 		if len(rest) == 0 {

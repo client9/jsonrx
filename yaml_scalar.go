@@ -3,6 +3,7 @@ package tojson
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 )
 
 // --------------------------------------------------------------------------
@@ -16,7 +17,7 @@ const yamlTabWidth = 2
 // yamlBoolAliases controls whether YAML 1.1 boolean aliases are recognised.
 // When true, yes/no/on/off (and their case variants) map to true/false.
 // When false, only true/false (and their case variants) are treated as booleans.
-const yamlBoolAliases = true
+const yamlBoolAliases = false
 
 // yamlTildeNull controls whether bare ~ is treated as null.
 const yamlTildeNull = false
@@ -53,11 +54,14 @@ func writeScalar(s []byte, buf *bytes.Buffer) error {
 	}
 
 	if len(s) > 0 && s[0] == '"' {
-		str, _, err := parseDoubleQuoted(s)
+		// Decode using Go string literal rules, then re-encode as JSON.
+		// This handles \n \t \uNNNN \xNN etc.; YAML-specific escapes like
+		// \e \N \L \P are outside the minimal YAML spec and not supported.
+		str, err := strconv.Unquote(string(s))
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid double-quoted string: %w", err)
 		}
-		writeJSONString(str, buf)
+		writeJSONString([]byte(str), buf)
 		return nil
 	}
 	if len(s) > 0 && s[0] == '\'' {
@@ -67,7 +71,7 @@ func writeScalar(s []byte, buf *bytes.Buffer) error {
 	}
 
 	if isYAMLNumber(s) {
-		buf.Write(s)
+		writeNormalizedNumber(buf, s)
 		return nil
 	}
 
@@ -85,93 +89,35 @@ func writeJSONString(s []byte, buf *bytes.Buffer) {
 // Quoted string parsers
 // --------------------------------------------------------------------------
 
-func parseUnicodeEscape(hex4 []byte) (rune, error) {
-	var r rune
-	for _, c := range hex4 {
-		r <<= 4
-		switch {
-		case c >= '0' && c <= '9':
-			r |= rune(c - '0')
-		case c >= 'a' && c <= 'f':
-			r |= rune(c-'a') + 10
-		case c >= 'A' && c <= 'F':
-			r |= rune(c-'A') + 10
-		default:
-			return 0, fmt.Errorf("invalid hex digit %q", c)
+// doubleQuotedEnd returns the index just past the closing '"' in s,
+// or -1 if the string is unterminated. s must start with '"'.
+// Only used to locate the boundary; decoding is done by strconv.Unquote.
+func doubleQuotedEnd(s []byte) int {
+	for i := 1; i < len(s); i++ {
+		if s[i] == '\\' {
+			i++ // skip the escaped character
+			continue
+		}
+		if s[i] == '"' {
+			return i + 1
 		}
 	}
-	return r, nil
+	return -1
 }
 
-// parseDoubleQuoted parses a double-quoted YAML string starting at s[0].
-// Returns the unescaped content, the index after the closing '"', and any error.
-func parseDoubleQuoted(s []byte) ([]byte, int, error) {
-	if len(s) < 2 || s[0] != '"' {
-		return s, len(s), nil
+// parseDoubleQuotedRaw decodes a double-quoted string at the start of s using
+// Go string literal rules (strconv.Unquote) and returns the decoded content
+// and the remainder of s after the closing '"'.
+func parseDoubleQuotedRaw(s []byte) ([]byte, []byte, error) {
+	end := doubleQuotedEnd(s)
+	if end < 0 {
+		return nil, s, fmt.Errorf("unterminated double-quoted string")
 	}
-	// Fast path: no escape sequences — return a no-alloc sub-slice.
-	for i := 1; i < len(s); i++ {
-		if s[i] == '"' {
-			return s[1:i], i + 1, nil
-		}
-		if s[i] == '\\' {
-			break // has escapes, fall through to slow path
-		}
+	str, err := strconv.Unquote(string(s[:end]))
+	if err != nil {
+		return nil, s, fmt.Errorf("invalid double-quoted string: %w", err)
 	}
-	// Slow path: has escape sequences, must decode.
-	var b bytes.Buffer
-	i := 1
-	for i < len(s) {
-		c := s[i]
-		if c == '"' {
-			return b.Bytes(), i + 1, nil
-		}
-		if c == '\\' && i+1 < len(s) {
-			i++
-			switch s[i] {
-			case 'n':
-				b.WriteByte('\n')
-			case 't':
-				b.WriteByte('\t')
-			case 'r':
-				b.WriteByte('\r')
-			case '"':
-				b.WriteByte('"')
-			case '\\':
-				b.WriteByte('\\')
-			case '/':
-				b.WriteByte('/')
-			case 'b':
-				b.WriteByte('\b')
-			case 'f':
-				b.WriteByte('\f')
-			case 'u':
-				if i+4 < len(s) {
-					r, err := parseUnicodeEscape(s[i+1 : i+5])
-					if err == nil {
-						if r >= 0xD800 && r <= 0xDBFF && i+10 < len(s) && s[i+5] == '\\' && s[i+6] == 'u' {
-							r2, err2 := parseUnicodeEscape(s[i+7 : i+11])
-							if err2 == nil && r2 >= 0xDC00 && r2 <= 0xDFFF {
-								r = 0x10000 + (r-0xD800)<<10 + (r2 - 0xDC00)
-								i += 6
-							}
-						}
-						b.WriteRune(r)
-						i += 4
-						break
-					}
-				}
-				b.WriteString(`\u`)
-			default:
-				b.WriteByte('\\')
-				b.WriteByte(s[i])
-			}
-		} else {
-			b.WriteByte(c)
-		}
-		i++
-	}
-	return b.Bytes(), i, fmt.Errorf("unterminated double-quoted string")
+	return []byte(str), s[end:], nil
 }
 
 func parseSingleQuoted(s []byte) []byte {
@@ -200,17 +146,9 @@ func isMapKey(content []byte) bool {
 	}
 	switch content[0] {
 	case '"':
-		i := 1
-		for i < len(content) {
-			if content[i] == '"' {
-				return i+1 < len(content) && content[i+1] == ':'
-			}
-			if content[i] == '\\' {
-				i++
-			}
-			i++
-		}
-		return false
+		// find the closing quote, then check for the required ': ' separator
+		end := doubleQuotedEnd(content)
+		return end >= 0 && end < len(content) && content[end] == ':'
 	case '\'':
 		i := 1
 		for i < len(content) {
@@ -229,32 +167,29 @@ func isMapKey(content []byte) bool {
 }
 
 // splitMapKey splits "key: value" → ("key", "value"), or "key:" → ("key", nil).
-func splitMapKey(content []byte) (key, value []byte) {
+func splitMapKey(content []byte) (key, value []byte, err error) {
 	switch {
 	case len(content) > 0 && content[0] == '"':
-		k, rest := parseDoubleQuotedRaw(content)
+		k, rest, err := parseDoubleQuotedRaw(content)
+		if err != nil {
+			return nil, nil, err
+		}
 		rest = bytes.TrimPrefix(rest, []byte(":"))
 		rest = bytes.TrimPrefix(rest, []byte(" "))
-		return k, bytes.TrimSpace(rest)
+		return k, bytes.TrimSpace(rest), nil
 	case len(content) > 0 && content[0] == '\'':
 		k, rest := parseSingleQuotedRaw(content)
 		rest = bytes.TrimPrefix(rest, []byte(":"))
 		rest = bytes.TrimPrefix(rest, []byte(" "))
-		return k, bytes.TrimSpace(rest)
+		return k, bytes.TrimSpace(rest), nil
 	}
-	if idx := bytes.Index(content, []byte(": ")); idx >= 0 {
-		return content[:idx], bytes.TrimSpace(content[idx+2:])
+	if idx, after, ok := bytes.Cut(content, []byte(": ")); ok {
+		return idx, bytes.TrimSpace(after), nil
 	}
 	if len(content) > 0 && content[len(content)-1] == ':' {
-		return content[:len(content)-1], nil
+		return content[:len(content)-1], nil, nil
 	}
-	return content, nil
-}
-
-// parseDoubleQuotedRaw returns (unescaped bytes, remainder after closing quote).
-func parseDoubleQuotedRaw(s []byte) ([]byte, []byte) {
-	str, end, _ := parseDoubleQuoted(s)
-	return str, s[end:]
+	return content, nil, nil
 }
 
 // parseSingleQuotedRaw returns (unescaped bytes, remainder after closing quote).
@@ -326,7 +261,12 @@ func yamlLeadingIndent(s []byte) (int, error) {
 	return n, nil
 }
 
-// isYAMLNumber returns true for byte slices that are valid JSON numbers (with optional + prefix).
+// isYAMLNumber returns true for decimal integers and floats:
+//
+//	integer: [-+]?(0|[1-9][0-9]*)
+//	float:   [-+]?[0-9]*\.[0-9]*([eE][-+]?[0-9]+)?
+//
+// Leading + is accepted here; writeScalar strips it before writing output.
 func isYAMLNumber(s []byte) bool {
 	if len(s) == 0 {
 		return false
@@ -339,9 +279,23 @@ func isYAMLNumber(s []byte) bool {
 		return false
 	}
 	hasDigit := false
-	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+	if s[i] >= '0' && s[i] <= '9' {
 		hasDigit = true
-		i++
+		if s[i] == '0' {
+			i++
+			// leading zero: valid only as bare 0 or start of float (0.5)
+			if i < len(s) && s[i] >= '0' && s[i] <= '9' {
+				return false
+			}
+		} else {
+			for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+				i++
+			}
+		}
+	}
+	if i < len(s) && s[i] == '.' && !hasDigit {
+		// leading dot: .5 is valid
+		hasDigit = true
 	}
 	if !hasDigit {
 		return false

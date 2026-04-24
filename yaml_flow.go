@@ -221,10 +221,14 @@ func flowParseKey(s []byte, pos int) ([]byte, int, error) {
 	}
 }
 
-// flowParseDoubleQuoted reads a double-quoted string starting at s[pos].
+// flowParseDoubleQuoted reads a double-quoted string starting at s[pos]
+// using Go string literal rules (strconv.Unquote).
 func flowParseDoubleQuoted(s []byte, pos int) ([]byte, int, error) {
-	str, end, err := parseDoubleQuoted(s[pos:])
-	return str, pos + end, err
+	str, rest, err := parseDoubleQuotedRaw(s[pos:])
+	if err != nil {
+		return nil, pos, err
+	}
+	return str, len(s) - len(rest), nil
 }
 
 // flowParseSingleQuoted reads a single-quoted string starting at s[pos].

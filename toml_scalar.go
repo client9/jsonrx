@@ -7,6 +7,25 @@ import (
 	"unicode/utf8"
 )
 
+// parseUnicodeEscape decodes a 4-hex-digit YAML/TOML \uNNNN escape sequence.
+func parseUnicodeEscape(hex4 []byte) (rune, error) {
+	var r rune
+	for _, c := range hex4 {
+		r <<= 4
+		switch {
+		case c >= '0' && c <= '9':
+			r |= rune(c - '0')
+		case c >= 'a' && c <= 'f':
+			r |= rune(c-'a') + 10
+		case c >= 'A' && c <= 'F':
+			r |= rune(c-'A') + 10
+		default:
+			return 0, fmt.Errorf("invalid hex digit %q", c)
+		}
+	}
+	return r, nil
+}
+
 // scalarStringNode encodes s as a JSON string and returns it as a scalar jnode.
 func scalarStringNode(s []byte) *jnode {
 	return &jnode{raw: appendString(make([]byte, 0, len(s)+2), s)}

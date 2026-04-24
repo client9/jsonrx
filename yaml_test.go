@@ -51,15 +51,56 @@ func TestYAMLScalars(t *testing.T) {
 	roundtripYAML(t, `"hello world"`, `"hello world"`)
 	roundtripYAML(t, `'it''s fine'`, `"it's fine"`)
 	roundtripYAML(t, `null`, `null`)
-	roundtripYAML(t, `~`, `null`)
+	if yamlTildeNull {
+		roundtripYAML(t, `~`, `null`)
+	} else {
+		roundtripYAML(t, `~`, `"~"`)
+	}
 	roundtripYAML(t, `true`, `true`)
 	roundtripYAML(t, `false`, `false`)
-	roundtripYAML(t, `yes`, `true`)
-	roundtripYAML(t, `no`, `false`)
+	if yamlBoolAliases {
+		roundtripYAML(t, `yes`, `true`)
+		roundtripYAML(t, `no`, `false`)
+	} else {
+		roundtripYAML(t, `yes`, `"yes"`)
+		roundtripYAML(t, `no`, `"no"`)
+	}
 	roundtripYAML(t, `42`, `42`)
 	roundtripYAML(t, `3.14`, `3.14`)
 	roundtripYAML(t, `-7`, `-7`)
 	roundtripYAML(t, `1.5e10`, `1.5e10`)
+}
+
+func TestYAMLNumberNormalization(t *testing.T) {
+	// leading + stripped
+	roundtripYAML(t, `+42`, `42`)
+	roundtripYAML(t, `+3.14`, `3.14`)
+	// leading dot → 0.
+	roundtripYAML(t, `.5`, `0.5`)
+	roundtripYAML(t, `+.5`, `0.5`)
+	roundtripYAML(t, `-.5`, `-0.5`)
+	// trailing dot → .0
+	roundtripYAML(t, `1.`, `1.0`)
+	roundtripYAML(t, `-1.`, `-1.0`)
+	// scientific notation: sign optional
+	roundtripYAML(t, `1.5e4`, `1.5e4`)
+	roundtripYAML(t, `1.5e+4`, `1.5e+4`)
+	roundtripYAML(t, `1.5e-4`, `1.5e-4`)
+	roundtripYAML(t, `.5e4`, `0.5e4`)
+	// signed integers
+	roundtripYAML(t, `-1`, `-1`)
+	roundtripYAML(t, `+1`, `1`)
+	// leading zeros → string (not a number)
+	roundtripYAML(t, `0`, `0`)
+	roundtripYAML(t, `+0`, `0`)
+	roundtripYAML(t, `-0`, `-0`)
+	roundtripYAML(t, `00`, `"00"`)
+	roundtripYAML(t, `01`, `"01"`)
+	roundtripYAML(t, `0012314`, `"0012314"`)
+	// leading zero on float is fine
+	roundtripYAML(t, `0.5`, `0.5`)
+	// large integer exceeding uint64 max — passes through as JSON number
+	roundtripYAML(t, `99999999999999999999999999999`, `99999999999999999999999999999`)
 }
 
 func TestYAMLSimpleMapping(t *testing.T) {
@@ -152,11 +193,15 @@ func TestYAMLQuotedKeys(t *testing.T) {
 }
 
 func TestYAMLNullValues(t *testing.T) {
+	bVal := `"~"`
+	if yamlTildeNull {
+		bVal = `null`
+	}
 	roundtripYAML(t, `
 a: null
 b: ~
 c:
-`, `{"a":null,"b":null,"c":null}`)
+`, `{"a":null,"b":`+bVal+`,"c":null}`)
 }
 
 func TestYAMLMixedNested(t *testing.T) {
@@ -356,11 +401,19 @@ func TestYAMLFlowSingleQuoted(t *testing.T) {
 }
 
 func TestYAMLDoubleQuotedEscapes(t *testing.T) {
+	// valid Go string escapes
 	roundtripYAML(t, `"\b\f"`, `"\u0008\u000c"`)
-	roundtripYAML(t, `"\/"`, `"/"`)
-	roundtripYAML(t, `"\q"`, `"\\q"`)
-	roundtripYAML(t, `"\u41"`, `"\\u41"`)
-	yamlJSONPassthrough(t, `"\uD800\uDC00"`)
+	// invalid escapes are errors under Go string literal rules
+	for _, bad := range []string{
+		`"\/"`,           // \/ is JSON-only, not a Go escape
+		`"\q"`,           // \q is not a recognized escape
+		`"\u41"`,         // \uNNNN requires exactly 4 hex digits
+		`"\uD800\uDC00"`, // surrogate pairs not supported by strconv.Unquote
+	} {
+		if _, err := FromYAML([]byte(bad)); err == nil {
+			t.Errorf("%s should error under Go string literal rules", bad)
+		}
+	}
 }
 
 func TestYAMLControlCharEncoding(t *testing.T) {
@@ -436,11 +489,15 @@ func TestYAMLConvertEmptyInput(t *testing.T) {
 }
 
 func TestYAMLDoubleQuotedEscapesMore(t *testing.T) {
+	// valid Go string escapes
 	roundtripYAML(t, `"\r"`, `"\r"`)
 	roundtripYAML(t, `"say \"hi\""`, `"say \"hi\""`)
 	roundtripYAML(t, `"back\\slash"`, `"back\\slash"`)
 	roundtripYAML(t, `"\u004a"`, `"J"`)
-	roundtripYAML(t, `"\uGHIJ"`, `"\\uGHIJ"`)
+	// invalid hex in \uNNNN is an error under Go string literal rules
+	if _, err := FromYAML([]byte(`"\uGHIJ"`)); err == nil {
+		t.Error(`"\uGHIJ" should error: invalid hex digits in \uNNNN escape`)
+	}
 }
 
 func TestYAMLSingleQuotedValueWithDoubleQuote(t *testing.T) {
