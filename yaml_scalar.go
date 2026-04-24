@@ -5,6 +5,19 @@ import (
 	"fmt"
 )
 
+// --------------------------------------------------------------------------
+// YAML parser options
+// --------------------------------------------------------------------------
+
+// yamlTabWidth is the number of spaces a tab character counts as when
+// measuring indentation. Set to < 0 to forbid tabs in YAML input entirely.
+const yamlTabWidth = 2
+
+// yamlBoolAliases controls whether YAML 1.1 boolean aliases are recognised.
+// When true, yes/no/on/off (and their case variants) map to true/false.
+// When false, only true/false (and their case variants) are treated as booleans.
+const yamlBoolAliases = true
+
 // writeScalar converts a YAML scalar to its JSON representation.
 func writeScalar(s []byte, buf *bytes.Buffer) error {
 	s = bytes.TrimSpace(s)
@@ -12,12 +25,22 @@ func writeScalar(s []byte, buf *bytes.Buffer) error {
 	case "", "null", "~", "Null", "NULL":
 		buf.WriteString("null")
 		return nil
-	case "true", "True", "TRUE", "yes", "Yes", "YES", "on", "On", "ON":
+	case "true", "True", "TRUE":
 		buf.WriteString("true")
 		return nil
-	case "false", "False", "FALSE", "no", "No", "NO", "off", "Off", "OFF":
+	case "false", "False", "FALSE":
 		buf.WriteString("false")
 		return nil
+	}
+	if yamlBoolAliases {
+		switch string(s) {
+		case "yes", "Yes", "YES", "on", "On", "ON":
+			buf.WriteString("true")
+			return nil
+		case "no", "No", "NO", "off", "Off", "OFF":
+			buf.WriteString("false")
+			return nil
+		}
 	}
 
 	if len(s) > 0 && s[0] == '"' {
@@ -273,6 +296,25 @@ func leadingSpaces(s []byte) int {
 		}
 	}
 	return n
+}
+
+// yamlLeadingIndent counts the indentation of s using yamlTabWidth for tabs.
+// Returns an error if yamlTabWidth < 0 and s contains a leading tab.
+func yamlLeadingIndent(s []byte) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c == ' ' {
+			n++
+		} else if c == '\t' {
+			if yamlTabWidth < 0 {
+				return 0, fmt.Errorf("tab character not allowed in YAML indentation")
+			}
+			n += yamlTabWidth
+		} else {
+			break
+		}
+	}
+	return n, nil
 }
 
 // isYAMLNumber returns true for byte slices that are valid JSON numbers (with optional + prefix).

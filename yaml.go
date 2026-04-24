@@ -13,7 +13,9 @@ import "bytes"
 
 func yamlConvert(input []byte) ([]byte, error) {
 	var p parser
-	p.init(input)
+	if err := p.init(input); err != nil {
+		return nil, err
+	}
 	if len(p.lines) == 0 {
 		return []byte("null"), nil
 	}
@@ -43,7 +45,7 @@ type pline struct {
 
 // init populates p from input. Kept as a method so yamlConvert can declare
 // parser on the stack and avoid the &parser{} heap escape.
-func (p *parser) init(input []byte) {
+func (p *parser) init(input []byte) error {
 	// Count newlines for pre-allocation — avoids repeated slice growth.
 	n := bytes.Count(input, []byte{'\n'}) + 1
 
@@ -84,7 +86,10 @@ func (p *parser) init(input []byte) {
 			bytes.Equal(trimmed, []byte("---")) || bytes.Equal(trimmed, []byte("...")) {
 			continue
 		}
-		indent := leadingSpaces(s)
+		indent, err := yamlLeadingIndent(s)
+		if err != nil {
+			return atLineCol(i, 0, err)
+		}
 		content := s[indent:]
 		// strip inline comment (outside quotes) — best-effort
 		content = stripInlineComment(content)
@@ -97,6 +102,7 @@ func (p *parser) init(input []byte) {
 	p.lines = lines
 	p.rawLines = rawLines
 	p.rawIdx = rawIdx
+	return nil
 }
 
 func (p *parser) peek() (pline, bool) {
@@ -141,7 +147,10 @@ func (p *parser) parseBlock(parentIndent int, buf *bytes.Buffer) error {
 		p.consume()
 		rawLine := p.rawIdx[p.pos-1]
 		if style, chomping, ok := detectBlockScalar(l.content); ok {
-			scalar, last := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+			scalar, last, err := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+			if err != nil {
+				return err
+			}
 			p.skipPastRawLine(last)
 			writeJSONString(scalar, buf)
 			return nil
@@ -186,7 +195,10 @@ func (p *parser) parseMapping(indent int, buf *bytes.Buffer) error {
 				return err
 			}
 		} else if style, chomping, ok := detectBlockScalar(rest); ok {
-			scalar, last := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+			scalar, last, err := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+			if err != nil {
+				return err
+			}
 			p.skipPastRawLine(last)
 			writeJSONString(scalar, buf)
 		} else if isFlowValue(rest) {
@@ -232,7 +244,10 @@ func (p *parser) parseSequence(indent int, buf *bytes.Buffer) error {
 				return err
 			}
 		} else if style, chomping, ok := detectBlockScalar(rest); ok {
-			scalar, last := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+			scalar, last, err := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+			if err != nil {
+				return err
+			}
 			p.skipPastRawLine(last)
 			writeJSONString(scalar, buf)
 		} else if isFlowValue(rest) {
@@ -338,7 +353,7 @@ func detectBlockScalar(s []byte) (style, chomping byte, ok bool) {
 
 // collectBlockScalar reads raw lines following rawLineIdx to build a literal
 // (style='|') or folded (style='>') scalar.
-func (p *parser) collectBlockScalar(style, chomping byte, rawLineIdx, keyIndent int) ([]byte, int) {
+func (p *parser) collectBlockScalar(style, chomping byte, rawLineIdx, keyIndent int) ([]byte, int, error) {
 	blockIndent := -1
 	var contentLines [][]byte
 	lastIdx := rawLineIdx
@@ -352,7 +367,10 @@ func (p *parser) collectBlockScalar(style, chomping byte, rawLineIdx, keyIndent 
 			}
 			continue
 		}
-		ind := leadingSpaces(raw)
+		ind, err := yamlLeadingIndent(raw)
+		if err != nil {
+			return nil, -1, atLineCol(i, 0, err)
+		}
 		if blockIndent < 0 {
 			if ind <= keyIndent {
 				break
@@ -398,7 +416,7 @@ func (p *parser) collectBlockScalar(style, chomping byte, rawLineIdx, keyIndent 
 		}
 	}
 
-	return result, lastIdx
+	return result, lastIdx, nil
 }
 
 // skipPastRawLine advances p.pos past all plines whose raw-line index is ≤ lastRawIdx.
