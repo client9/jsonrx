@@ -1,12 +1,11 @@
 // Package tojson converts YAML, TOML, and JSON variants to standard JSON bytes.
 //
-// The package is built around a simple two-step pattern: convert the source
-// bytes to JSON, then unmarshal with the standard library using only json
-// struct tags:
+// The package converts source bytes to JSON, then they can be unmarshals 
+// using standard json struct tags.
 //
 //	raw, err := tojson.FromYAML(src)
 //	if err != nil { ... }
-//	if err := json.Unmarshal(raw, &cfg); err != nil { ... }
+//	if err = json.Unmarshal(raw, &cfg); err != nil { ... }
 //
 // The package exposes four top-level functions:
 //
