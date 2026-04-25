@@ -12,6 +12,9 @@ build: ## build module and CLI
 test: ## run all unit tests
 	go test ./...
 
+test-toml: ## run only TOML tests
+	go test -v -run TOML ./...
+
 version: ## print OS, Go, and golangci versions
 	@echo $$0
 	@uname -a
