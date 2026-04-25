@@ -44,11 +44,16 @@ func multilineStart(s []byte) (bool, int) {
 	return false, 0
 }
 
+// tomlMaxNesting is the maximum number of table-header levels ([a.b.c.d] = 4).
+// Inputs that nest deeper return an error rather than allocating unboundedly.
+const tomlMaxNesting = 4
+
 // tomlLineParser holds the mutable state shared across methods during a single
 // tomlConvertLine call.
 type tomlLineParser struct {
 	buf         bytes.Buffer
-	stack       []streamFrame
+	stackBuf    [tomlMaxNesting + 1]streamFrame // fixed backing; index 0 is the root frame
+	stackLen    int                             // number of active frames in stackBuf
 	closed      tomlLineClosedTables
 	inlineKeys  [][]byte
 	inlineComma []bool
@@ -123,14 +128,14 @@ func (p *tomlLineParser) topNC() bool {
 	if len(p.inlineKeys) > 0 {
 		return p.inlineComma[len(p.inlineComma)-1]
 	}
-	return p.stack[len(p.stack)-1].needComma
+	return p.stackBuf[p.stackLen-1].needComma
 }
 
 func (p *tomlLineParser) setTopNC(v bool) {
 	if len(p.inlineKeys) > 0 {
 		p.inlineComma[len(p.inlineComma)-1] = v
 	} else {
-		p.stack[len(p.stack)-1].needComma = v
+		p.stackBuf[p.stackLen-1].needComma = v
 	}
 }
 
@@ -139,7 +144,7 @@ func (p *tomlLineParser) markKey(key []byte) error {
 	if len(p.inlineKeys) > 0 {
 		keys = &p.inlineUsed[len(p.inlineUsed)-1]
 	} else {
-		keys = &p.stack[len(p.stack)-1].usedKeys
+		keys = &p.stackBuf[p.stackLen-1].usedKeys
 	}
 	for _, k := range *keys {
 		if bytes.Equal(k, key) {
@@ -160,10 +165,10 @@ func (p *tomlLineParser) closeInlineTo(depth int) {
 }
 
 func (p *tomlLineParser) closeSectionsTo(depth int) {
-	for len(p.stack) > depth {
-		top := p.stack[len(p.stack)-1]
-		p.closed.mark(p.stack)
-		p.stack = p.stack[:len(p.stack)-1]
+	for p.stackLen > depth {
+		top := p.stackBuf[p.stackLen-1]
+		p.closed.mark(p.stackBuf[:p.stackLen])
+		p.stackLen--
 		if top.isAoT {
 			p.buf.WriteString("}]")
 		} else {
@@ -173,11 +178,11 @@ func (p *tomlLineParser) closeSectionsTo(depth int) {
 }
 
 func (p *tomlLineParser) currentSectionIs(path [][]byte) bool {
-	if len(path) != len(p.stack)-1 {
+	if len(path) != p.stackLen-1 {
 		return false
 	}
 	for i := range path {
-		if !bytes.Equal(p.stack[i+1].key, path[i]) {
+		if !bytes.Equal(p.stackBuf[i+1].key, path[i]) {
 			return false
 		}
 	}
@@ -191,8 +196,8 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 	} else {
 		fullDotPath = string(bytes.Join(path, []byte(".")))
 	}
-	if isAoT && len(p.stack) > 1 {
-		top := &p.stack[len(p.stack)-1]
+	if isAoT && p.stackLen > 1 {
+		top := &p.stackBuf[p.stackLen-1]
 		if top.isAoT && p.currentSectionIs(path) {
 			p.buf.WriteString("},{")
 			top.needComma = false
@@ -201,8 +206,8 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 		}
 	}
 	cd := 0
-	for cd < len(path) && cd+1 < len(p.stack) {
-		if !bytes.Equal(p.stack[cd+1].key, path[cd]) {
+	for cd < len(path) && cd+1 < p.stackLen {
+		if !bytes.Equal(p.stackBuf[cd+1].key, path[cd]) {
 			break
 		}
 		cd++
@@ -212,7 +217,7 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 	}
 	p.closeSectionsTo(cd + 1)
 	if cd == len(path) {
-		frame := &p.stack[len(p.stack)-1]
+		frame := &p.stackBuf[p.stackLen-1]
 		if !isAoT {
 			if frame.explicit {
 				return fmt.Errorf("duplicate table header [%s]", fullDotPath)
@@ -222,7 +227,7 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 		return nil
 	}
 	for i := cd; i < len(path); i++ {
-		top := &p.stack[len(p.stack)-1]
+		top := &p.stackBuf[p.stackLen-1]
 		for _, k := range top.usedKeys {
 			if bytes.Equal(k, path[i]) {
 				var dp string
@@ -253,12 +258,16 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 		} else {
 			dp = string(bytes.Join(path[:i+1], []byte(".")))
 		}
-		p.stack = append(p.stack, streamFrame{
+		if p.stackLen >= len(p.stackBuf) {
+			return fmt.Errorf("table nesting exceeds maximum depth of %d", tomlMaxNesting)
+		}
+		p.stackBuf[p.stackLen] = streamFrame{
 			key:      path[i],
 			dotPath:  dp,
 			isAoT:    isAoTFrame,
 			explicit: i == len(path)-1 && !isAoT,
-		})
+		}
+		p.stackLen++
 	}
 	return nil
 }
@@ -489,10 +498,8 @@ func (p *tomlLineParser) writeValue(rest []byte, lineNum, valCol int) error {
 	return nil
 }
 
-func tomlConvertLine(input []byte) ([]byte, error) {
-	p := &tomlLineParser{
-		stack: make([]streamFrame, 1, 8),
-	}
+func fromTOMLLine(input []byte) ([]byte, error) {
+	p := &tomlLineParser{stackLen: 1} // stackBuf[0] is the root frame, zero-initialised
 	p.buf.Grow(len(input))
 	p.buf.WriteByte('{')
 
@@ -574,8 +581,8 @@ func tomlConvertLine(input []byte) ([]byte, error) {
 	}
 
 	p.closeInlineTo(0)
-	for i := len(p.stack) - 1; i >= 1; i-- {
-		if p.stack[i].isAoT {
+	for i := p.stackLen - 1; i >= 1; i-- {
+		if p.stackBuf[i].isAoT {
 			p.buf.WriteString("}]")
 		} else {
 			p.buf.WriteByte('}')
@@ -585,12 +592,6 @@ func tomlConvertLine(input []byte) ([]byte, error) {
 	return p.buf.Bytes(), nil
 }
 
-// fromTOMLLine converts TOML to JSON using the line-by-line state-machine path,
-// falling back to the tree-based path on out-of-order section re-entry.
-func fromTOMLLine(src []byte) ([]byte, error) {
-	out, err := tomlConvertLine(src)
-	if err == errReentry {
-		return tomlConvertTree(src)
-	}
-	return out, err
-}
+// tomlConvertLine is the raw line-by-line parser with no fallback.
+// It returns errReentry when out-of-order table re-entry is detected.
+func tomlConvertLine(input []byte) ([]byte, error) { return fromTOMLLine(input) }

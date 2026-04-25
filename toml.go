@@ -26,7 +26,8 @@ func fromTOMLStreaming(src []byte) ([]byte, error) {
 var errReentry = errors.New("toml: out-of-order section")
 
 func tomlConvert(input []byte) ([]byte, error) {
-	out, err := tomlConvertStreaming(input)
+	//	out, err := tomlConvertStreaming(input)
+	out, err := fromTOMLLine(input)
 	if err == errReentry {
 		return tomlConvertTree(input)
 	}

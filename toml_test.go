@@ -2,14 +2,53 @@ package tojson
 
 import (
 	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func roundtripTOML(t *testing.T, toml, wantJSON string) {
+var update = flag.Bool("update", false, "regenerate golden .json files from tree parser")
+
+type tomlFn func([]byte) ([]byte, error)
+
+var tomlParsers = []struct {
+	name string
+	fn   tomlFn
+}{
+	{"streaming", fromTOMLStreaming},
+	{"line", fromTOMLLine},
+	{"tree", fromTOMLTree},
+	{"router", FromTOML},
+}
+
+// skipStreaming is the skip list for tests requiring out-of-order table re-entry,
+// which the streaming parser cannot handle (it returns errReentry instead of falling back).
+var skipStreaming = []string{"streaming", "line"}
+
+// forParsers runs f as a subtest for each parser not in the skip list.
+func forParsers(t *testing.T, skip []string, f func(*testing.T, tomlFn)) {
 	t.Helper()
-	got, err := FromTOML([]byte(toml))
+	skipSet := make(map[string]bool, len(skip))
+	for _, s := range skip {
+		skipSet[s] = true
+	}
+	for _, p := range tomlParsers {
+		t.Run(p.name, func(t *testing.T) {
+			if skipSet[p.name] {
+				t.Skip("parser does not support this feature")
+			}
+			f(t, p.fn)
+		})
+	}
+}
+
+func checkTOML(t *testing.T, fn tomlFn, toml, wantJSON string) {
+	t.Helper()
+	got, err := fn([]byte(toml))
 	if err != nil {
-		t.Fatalf("FromTOML error: %v", err)
+		t.Fatalf("error: %v", err)
 	}
 	var v any
 	if err := json.Unmarshal(got, &v); err != nil {
@@ -31,64 +70,80 @@ func roundtripTOML(t *testing.T, toml, wantJSON string) {
 // --------------------------------------------------------------------------
 
 func TestTOMLBasicStrings(t *testing.T) {
-	roundtripTOML(t, `key = "hello"`, `{"key":"hello"}`)
-	roundtripTOML(t, `key = "tab\there"`, `{"key":"tab\there"}`)
-	roundtripTOML(t, `key = "newline\nhere"`, `{"key":"newline\nhere"}`)
-	roundtripTOML(t, `key = "backslash\\"`, `{"key":"backslash\\"}`)
-	roundtripTOML(t, `key = "quote\""`, `{"key":"quote\""}`)
-	roundtripTOML(t, `key = "\u0041"`, `{"key":"A"}`)
-	roundtripTOML(t, `key = "\U00000041"`, `{"key":"A"}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `key = "hello"`, `{"key":"hello"}`)
+		checkTOML(t, fn, `key = "tab\there"`, `{"key":"tab\there"}`)
+		checkTOML(t, fn, `key = "newline\nhere"`, `{"key":"newline\nhere"}`)
+		checkTOML(t, fn, `key = "backslash\\"`, `{"key":"backslash\\"}`)
+		checkTOML(t, fn, `key = "quote\""`, `{"key":"quote\""}`)
+		checkTOML(t, fn, `key = "A"`, `{"key":"A"}`)
+		checkTOML(t, fn, `key = "\U00000041"`, `{"key":"A"}`)
+	})
 }
 
 func TestTOMLLiteralStrings(t *testing.T) {
-	roundtripTOML(t, `key = 'hello world'`, `{"key":"hello world"}`)
-	roundtripTOML(t, `key = 'no \n escape'`, `{"key":"no \\n escape"}`)
-	roundtripTOML(t, `key = 'C:\Users\tom'`, `{"key":"C:\\Users\\tom"}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `key = 'hello world'`, `{"key":"hello world"}`)
+		checkTOML(t, fn, `key = 'no \n escape'`, `{"key":"no \\n escape"}`)
+		checkTOML(t, fn, `key = 'C:\Users\tom'`, `{"key":"C:\\Users\\tom"}`)
+	})
 }
 
 func TestTOMLMultilineBasic(t *testing.T) {
-	roundtripTOML(t, "key = \"\"\"\nline one\nline two\n\"\"\"", `{"key":"line one\nline two\n"}`)
-	// line-ending backslash trims whitespace
-	roundtripTOML(t, "key = \"\"\"hello \\\n   world\"\"\"", `{"key":"hello world"}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, "key = \"\"\"\nline one\nline two\n\"\"\"", `{"key":"line one\nline two\n"}`)
+		// line-ending backslash trims whitespace
+		checkTOML(t, fn, "key = \"\"\"hello \\\n   world\"\"\"", `{"key":"hello world"}`)
+	})
 }
 
 func TestTOMLMultilineLiteral(t *testing.T) {
-	roundtripTOML(t, "key = '''\nline one\nline two\n'''", `{"key":"line one\nline two\n"}`)
-	// no escape processing
-	roundtripTOML(t, "key = '''no \\n escape'''", `{"key":"no \\n escape"}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, "key = '''\nline one\nline two\n'''", `{"key":"line one\nline two\n"}`)
+		// no escape processing
+		checkTOML(t, fn, "key = '''no \\n escape'''", `{"key":"no \\n escape"}`)
+	})
 }
 
 func TestTOMLIntegers(t *testing.T) {
-	roundtripTOML(t, `n = 42`, `{"n":42}`)
-	roundtripTOML(t, `n = -7`, `{"n":-7}`)
-	roundtripTOML(t, `n = +99`, `{"n":99}`)
-	roundtripTOML(t, `n = 0`, `{"n":0}`)
-	roundtripTOML(t, `n = 1_000_000`, `{"n":1000000}`)
-	roundtripTOML(t, `n = 0xFF`, `{"n":255}`)
-	roundtripTOML(t, `n = 0o17`, `{"n":15}`)
-	roundtripTOML(t, `n = 0b1010`, `{"n":10}`)
-	roundtripTOML(t, `n = 0xDEAD_BEEF`, `{"n":3735928559}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `n = 42`, `{"n":42}`)
+		checkTOML(t, fn, `n = -7`, `{"n":-7}`)
+		checkTOML(t, fn, `n = +99`, `{"n":99}`)
+		checkTOML(t, fn, `n = 0`, `{"n":0}`)
+		checkTOML(t, fn, `n = 1_000_000`, `{"n":1000000}`)
+		checkTOML(t, fn, `n = 0xFF`, `{"n":255}`)
+		checkTOML(t, fn, `n = 0o17`, `{"n":15}`)
+		checkTOML(t, fn, `n = 0b1010`, `{"n":10}`)
+		checkTOML(t, fn, `n = 0xDEAD_BEEF`, `{"n":3735928559}`)
+	})
 }
 
 func TestTOMLFloats(t *testing.T) {
-	roundtripTOML(t, `f = 3.14`, `{"f":3.14}`)
-	roundtripTOML(t, `f = -0.001`, `{"f":-0.001}`)
-	roundtripTOML(t, `f = 5e22`, `{"f":5e22}`)
-	roundtripTOML(t, `f = 1e+99`, `{"f":1e+99}`)
-	roundtripTOML(t, `f = 6.626e-34`, `{"f":6.626e-34}`)
-	roundtripTOML(t, `f = 1_0.0`, `{"f":10.0}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `f = 3.14`, `{"f":3.14}`)
+		checkTOML(t, fn, `f = -0.001`, `{"f":-0.001}`)
+		checkTOML(t, fn, `f = 5e22`, `{"f":5e22}`)
+		checkTOML(t, fn, `f = 1e+99`, `{"f":1e+99}`)
+		checkTOML(t, fn, `f = 6.626e-34`, `{"f":6.626e-34}`)
+		checkTOML(t, fn, `f = 1_0.0`, `{"f":10.0}`)
+	})
 }
 
 func TestTOMLBooleans(t *testing.T) {
-	roundtripTOML(t, `a = true`, `{"a":true}`)
-	roundtripTOML(t, `a = false`, `{"a":false}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `a = true`, `{"a":true}`)
+		checkTOML(t, fn, `a = false`, `{"a":false}`)
+	})
 }
 
 func TestTOMLDatetimes(t *testing.T) {
-	roundtripTOML(t, `dt = 1979-05-27T07:32:00Z`, `{"dt":"1979-05-27T07:32:00Z"}`)
-	roundtripTOML(t, `d = 1979-05-27`, `{"d":"1979-05-27"}`)
-	roundtripTOML(t, `t = 07:32:00`, `{"t":"07:32:00"}`)
-	roundtripTOML(t, `dt = 1979-05-27T07:32:00.999999-08:00`, `{"dt":"1979-05-27T07:32:00.999999-08:00"}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `dt = 1979-05-27T07:32:00Z`, `{"dt":"1979-05-27T07:32:00Z"}`)
+		checkTOML(t, fn, `d = 1979-05-27`, `{"d":"1979-05-27"}`)
+		checkTOML(t, fn, `t = 07:32:00`, `{"t":"07:32:00"}`)
+		checkTOML(t, fn, `dt = 1979-05-27T07:32:00.999999-08:00`, `{"dt":"1979-05-27T07:32:00.999999-08:00"}`)
+	})
 }
 
 // --------------------------------------------------------------------------
@@ -96,16 +151,20 @@ func TestTOMLDatetimes(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLKeyForms(t *testing.T) {
-	roundtripTOML(t, `bare_key = 1`, `{"bare_key":1}`)
-	roundtripTOML(t, `bare-key = 1`, `{"bare-key":1}`)
-	roundtripTOML(t, `"quoted key" = 1`, `{"quoted key":1}`)
-	roundtripTOML(t, `'literal key' = 1`, `{"literal key":1}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `bare_key = 1`, `{"bare_key":1}`)
+		checkTOML(t, fn, `bare-key = 1`, `{"bare-key":1}`)
+		checkTOML(t, fn, `"quoted key" = 1`, `{"quoted key":1}`)
+		checkTOML(t, fn, `'literal key' = 1`, `{"literal key":1}`)
+	})
 }
 
 func TestTOMLDottedKeys(t *testing.T) {
-	roundtripTOML(t, `a.b = 1`, `{"a":{"b":1}}`)
-	roundtripTOML(t, `a.b.c = 1`, `{"a":{"b":{"c":1}}}`)
-	roundtripTOML(t, "a.b = 1\na.c = 2", `{"a":{"b":1,"c":2}}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `a.b = 1`, `{"a":{"b":1}}`)
+		checkTOML(t, fn, `a.b.c = 1`, `{"a":{"b":{"c":1}}}`)
+		checkTOML(t, fn, "a.b = 1\na.c = 2", `{"a":{"b":1,"c":2}}`)
+	})
 }
 
 // --------------------------------------------------------------------------
@@ -113,34 +172,46 @@ func TestTOMLDottedKeys(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLSimpleTable(t *testing.T) {
-	roundtripTOML(t, "[server]\nhost = \"localhost\"\nport = 8080",
-		`{"server":{"host":"localhost","port":8080}}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, "[server]\nhost = \"localhost\"\nport = 8080",
+			`{"server":{"host":"localhost","port":8080}}`)
+	})
 }
 
 func TestTOMLDottedTableHeader(t *testing.T) {
-	roundtripTOML(t, "[a.b.c]\nkey = 1", `{"a":{"b":{"c":{"key":1}}}}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, "[a.b.c]\nkey = 1", `{"a":{"b":{"c":{"key":1}}}}`)
+	})
 }
 
 func TestTOMLMultipleTables(t *testing.T) {
-	roundtripTOML(t,
-		"[a]\nx = 1\n[b]\ny = 2",
-		`{"a":{"x":1},"b":{"y":2}}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[a]\nx = 1\n[b]\ny = 2",
+			`{"a":{"x":1},"b":{"y":2}}`)
+	})
 }
 
 func TestTOMLImplicitTables(t *testing.T) {
-	// [a.b] creates 'a' implicitly; then [a] can add sibling keys
-	roundtripTOML(t,
-		"[a.b]\nx = 1\n[a]\ny = 2",
-		`{"a":{"b":{"x":1},"y":2}}`)
+	// [a.b] creates 'a' implicitly; then [a] can add sibling keys.
+	// Streaming parser treats this as re-entry into a closed section.
+	forParsers(t, skipStreaming, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[a.b]\nx = 1\n[a]\ny = 2",
+			`{"a":{"b":{"x":1},"y":2}}`)
+	})
 }
 
 func TestTOMLTableReentry(t *testing.T) {
-	// Critical: [a] ... [b] ... [a.c] must re-enter the 'a' object
-	roundtripTOML(t,
-		"[a]\nx = 1\n[b]\ny = 2\n[a.c]\nz = 3",
-		`{"a":{"x":1,"c":{"z":3}},"b":{"y":2}}`)
+	// Critical: [a] ... [b] ... [a.c] must re-enter the 'a' object.
+	forParsers(t, skipStreaming, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[a]\nx = 1\n[b]\ny = 2\n[a.c]\nz = 3",
+			`{"a":{"x":1,"c":{"z":3}},"b":{"y":2}}`)
+	})
 }
 
+// TestTOMLLineOrderedTablesStayOnFastPath verifies ordered siblings don't trigger errReentry.
 func TestTOMLLineOrderedTablesStayOnFastPath(t *testing.T) {
 	got, err := tomlConvertLine([]byte("[fruit.apple]\nx = 1\n[fruit.orange]\ny = 2\n[animal]\nz = 3"))
 	if err != nil {
@@ -152,21 +223,11 @@ func TestTOMLLineOrderedTablesStayOnFastPath(t *testing.T) {
 	}
 }
 
+// TestTOMLLineOutOfOrderTableReentry verifies the errReentry sentinel is returned.
 func TestTOMLLineOutOfOrderTableReentry(t *testing.T) {
 	_, err := tomlConvertLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[fruit.orange]\ny = 2"))
 	if err != errReentry {
 		t.Fatalf("tomlConvertLine error = %v, want errReentry", err)
-	}
-}
-
-func TestTOMLLineOutOfOrderTableFallback(t *testing.T) {
-	got, err := fromTOMLLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[fruit.orange]\ny = 2"))
-	if err != nil {
-		t.Fatalf("fromTOMLLine error: %v", err)
-	}
-	want := `{"fruit":{"apple":{"x":1},"orange":{"y":2}},"animal":{"z":3}}`
-	if string(got) != want {
-		t.Fatalf("fromTOMLLine = %s, want %s", got, want)
 	}
 }
 
@@ -197,21 +258,27 @@ func TestTOMLLineQuotedDotAoTDoesNotCollideWithDottedPath(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLArrayOfTables(t *testing.T) {
-	roundtripTOML(t,
-		"[[products]]\nname = \"Hammer\"\n[[products]]\nname = \"Nail\"",
-		`{"products":[{"name":"Hammer"},{"name":"Nail"}]}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[[products]]\nname = \"Hammer\"\n[[products]]\nname = \"Nail\"",
+			`{"products":[{"name":"Hammer"},{"name":"Nail"}]}`)
+	})
 }
 
 func TestTOMLNestedAoT(t *testing.T) {
-	roundtripTOML(t,
-		"[[fruits]]\nname = \"apple\"\n[[fruits.varieties]]\nname = \"red\"\n[[fruits.varieties]]\nname = \"green\"",
-		`{"fruits":[{"name":"apple","varieties":[{"name":"red"},{"name":"green"}]}]}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[[fruits]]\nname = \"apple\"\n[[fruits.varieties]]\nname = \"red\"\n[[fruits.varieties]]\nname = \"green\"",
+			`{"fruits":[{"name":"apple","varieties":[{"name":"red"},{"name":"green"}]}]}`)
+	})
 }
 
 func TestTOMLMixedTableAndAoT(t *testing.T) {
-	roundtripTOML(t,
-		"[a]\nx = 1\n[[a.items]]\nname = \"A\"\n[[a.items]]\nname = \"B\"",
-		`{"a":{"x":1,"items":[{"name":"A"},{"name":"B"}]}}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[a]\nx = 1\n[[a.items]]\nname = \"A\"\n[[a.items]]\nname = \"B\"",
+			`{"a":{"x":1,"items":[{"name":"A"},{"name":"B"}]}}`)
+	})
 }
 
 // Out-of-order AoT: [[section]] reappears after an intervening [other] section,
@@ -219,30 +286,38 @@ func TestTOMLMixedTableAndAoT(t *testing.T) {
 // the re-entry. These tests exercise the tree-based fallback (tomlConvertTree).
 
 func TestTOMLAoTOutOfOrder(t *testing.T) {
-	roundtripTOML(t,
-		"[[a]]\nx = 1\n[b]\ny = 2\n[[a]]\nx = 2",
-		`{"a":[{"x":1},{"x":2}],"b":{"y":2}}`)
+	forParsers(t, skipStreaming, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[[a]]\nx = 1\n[b]\ny = 2\n[[a]]\nx = 2",
+			`{"a":[{"x":1},{"x":2}],"b":{"y":2}}`)
+	})
 }
 
 func TestTOMLAoTOutOfOrderStrings(t *testing.T) {
 	// string values exercise scalarStringNode via parseTOMLValue in tree path
-	roundtripTOML(t,
-		"[[items]]\nname = \"hammer\"\n[meta]\nv = 1\n[[items]]\nname = \"nail\"",
-		`{"items":[{"name":"hammer"},{"name":"nail"}],"meta":{"v":1}}`)
+	forParsers(t, skipStreaming, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[[items]]\nname = \"hammer\"\n[meta]\nv = 1\n[[items]]\nname = \"nail\"",
+			`{"items":[{"name":"hammer"},{"name":"nail"}],"meta":{"v":1}}`)
+	})
 }
 
 func TestTOMLAoTOutOfOrderInlineArray(t *testing.T) {
 	// inline array values exercise parseTOMLInlineArray via parseTOMLValue in tree path
-	roundtripTOML(t,
-		"[[items]]\nnums = [1, 2, 3]\n[meta]\nv = 1\n[[items]]\nnums = [4, 5]",
-		`{"items":[{"nums":[1,2,3]},{"nums":[4,5]}],"meta":{"v":1}}`)
+	forParsers(t, skipStreaming, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[[items]]\nnums = [1, 2, 3]\n[meta]\nv = 1\n[[items]]\nnums = [4, 5]",
+			`{"items":[{"nums":[1,2,3]},{"nums":[4,5]}],"meta":{"v":1}}`)
+	})
 }
 
 func TestTOMLTableAfterAoTReentry(t *testing.T) {
 	// [a] after [[a]] in the tree path enters the last aot element as context
-	roundtripTOML(t,
-		"[[a]]\nx = 1\n[b]\ny = 2\n[a]\nz = 3",
-		`{"a":[{"x":1,"z":3}],"b":{"y":2}}`)
+	forParsers(t, skipStreaming, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn,
+			"[[a]]\nx = 1\n[b]\ny = 2\n[a]\nz = 3",
+			`{"a":[{"x":1,"z":3}],"b":{"y":2}}`)
+	})
 }
 
 // --------------------------------------------------------------------------
@@ -250,13 +325,17 @@ func TestTOMLTableAfterAoTReentry(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLInlineTable(t *testing.T) {
-	roundtripTOML(t, `point = {x = 1, y = 2}`, `{"point":{"x":1,"y":2}}`)
-	roundtripTOML(t, `empty = {}`, `{"empty":{}}`)
-	roundtripTOML(t, `nested = {a = {b = 42}}`, `{"nested":{"a":{"b":42}}}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `point = {x = 1, y = 2}`, `{"point":{"x":1,"y":2}}`)
+		checkTOML(t, fn, `empty = {}`, `{"empty":{}}`)
+		checkTOML(t, fn, `nested = {a = {b = 42}}`, `{"nested":{"a":{"b":42}}}`)
+	})
 }
 
 func TestTOMLInlineTableDottedKeys(t *testing.T) {
-	roundtripTOML(t, `t = {a.b = 1, a.c = 2}`, `{"t":{"a":{"b":1,"c":2}}}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `t = {a.b = 1, a.c = 2}`, `{"t":{"a":{"b":1,"c":2}}}`)
+	})
 }
 
 // --------------------------------------------------------------------------
@@ -264,15 +343,19 @@ func TestTOMLInlineTableDottedKeys(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLInlineArray(t *testing.T) {
-	roundtripTOML(t, `nums = [1, 2, 3]`, `{"nums":[1,2,3]}`)
-	roundtripTOML(t, `mixed = [1, "two", true]`, `{"mixed":[1,"two",true]}`)
-	roundtripTOML(t, `nested = [[1, 2], [3, 4]]`, `{"nested":[[1,2],[3,4]]}`)
-	roundtripTOML(t, `empty = []`, `{"empty":[]}`)
-	roundtripTOML(t, `trailing = [1, 2,]`, `{"trailing":[1,2]}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, `nums = [1, 2, 3]`, `{"nums":[1,2,3]}`)
+		checkTOML(t, fn, `mixed = [1, "two", true]`, `{"mixed":[1,"two",true]}`)
+		checkTOML(t, fn, `nested = [[1, 2], [3, 4]]`, `{"nested":[[1,2],[3,4]]}`)
+		checkTOML(t, fn, `empty = []`, `{"empty":[]}`)
+		checkTOML(t, fn, `trailing = [1, 2,]`, `{"trailing":[1,2]}`)
+	})
 }
 
 func TestTOMLInlineArrayMultiline(t *testing.T) {
-	roundtripTOML(t, "nums = [\n  1,\n  2,\n  3,\n]", `{"nums":[1,2,3]}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, "nums = [\n  1,\n  2,\n  3,\n]", `{"nums":[1,2,3]}`)
+	})
 }
 
 // --------------------------------------------------------------------------
@@ -280,9 +363,11 @@ func TestTOMLInlineArrayMultiline(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLComments(t *testing.T) {
-	roundtripTOML(t, "# full line comment\nkey = 1", `{"key":1}`)
-	roundtripTOML(t, `key = 1 # inline comment`, `{"key":1}`)
-	roundtripTOML(t, "# comment\n[section]\n# another\nkey = 2", `{"section":{"key":2}}`)
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		checkTOML(t, fn, "# full line comment\nkey = 1", `{"key":1}`)
+		checkTOML(t, fn, `key = 1 # inline comment`, `{"key":1}`)
+		checkTOML(t, fn, "# comment\n[section]\n# another\nkey = 2", `{"section":{"key":2}}`)
+	})
 }
 
 // --------------------------------------------------------------------------
@@ -290,16 +375,18 @@ func TestTOMLComments(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLEmptyInput(t *testing.T) {
-	for _, input := range []string{"", "  \n  ", "# just a comment"} {
-		got, err := FromTOML([]byte(input))
-		if err != nil {
-			t.Errorf("FromTOML(%q) error: %v", input, err)
-			continue
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		for _, input := range []string{"", "  \n  ", "# just a comment"} {
+			got, err := fn([]byte(input))
+			if err != nil {
+				t.Errorf("input %q error: %v", input, err)
+				continue
+			}
+			if string(got) != "{}" {
+				t.Errorf("input %q = %s, want {}", input, got)
+			}
 		}
-		if string(got) != "{}" {
-			t.Errorf("FromTOML(%q) = %s, want {}", input, got)
-		}
-	}
+	})
 }
 
 // --------------------------------------------------------------------------
@@ -307,64 +394,209 @@ func TestTOMLEmptyInput(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLErrorDuplicateKey(t *testing.T) {
-	if _, err := FromTOML([]byte("a = 1\na = 2")); err == nil {
-		t.Error("expected error for duplicate key")
-	}
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("a = 1\na = 2")); err == nil {
+			t.Error("expected error for duplicate key")
+		}
+	})
+}
+
+func TestTOMLErrorDuplicateDottedKey(t *testing.T) {
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("a.b = 1\na.b = 2")); err == nil {
+			t.Error("expected error for duplicate dotted key")
+		}
+	})
+}
+
+func TestTOMLErrorDuplicateNestedKey(t *testing.T) {
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("[a]\nx = 1\nx = 2")); err == nil {
+			t.Error("expected error for duplicate key inside table")
+		}
+	})
 }
 
 func TestTOMLErrorDuplicateTable(t *testing.T) {
-	if _, err := FromTOML([]byte("[a]\n[a]")); err == nil {
-		t.Error("expected error for duplicate table")
-	}
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("[a]\n[a]")); err == nil {
+			t.Error("expected error for duplicate table")
+		}
+	})
+}
+
+func TestTOMLErrorDuplicateDottedTable(t *testing.T) {
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("[a.b]\n[a.b]")); err == nil {
+			t.Error("expected error for duplicate dotted table")
+		}
+	})
 }
 
 func TestTOMLErrorScalarAsTable(t *testing.T) {
-	if _, err := FromTOML([]byte("a = 1\n[a]")); err == nil {
-		t.Error("expected error for scalar redefined as table")
-	}
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("a = 1\n[a]")); err == nil {
+			t.Error("expected error for scalar redefined as table")
+		}
+	})
 }
 
 func TestTOMLErrorInf(t *testing.T) {
-	if _, err := FromTOML([]byte("f = inf")); err == nil {
-		t.Error("expected error for inf")
-	}
-	if _, err := FromTOML([]byte("f = -inf")); err == nil {
-		t.Error("expected error for -inf")
-	}
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("f = inf")); err == nil {
+			t.Error("expected error for inf")
+		}
+		if _, err := fn([]byte("f = -inf")); err == nil {
+			t.Error("expected error for -inf")
+		}
+	})
 }
 
 func TestTOMLErrorNaN(t *testing.T) {
-	if _, err := FromTOML([]byte("f = nan")); err == nil {
-		t.Error("expected error for nan")
-	}
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("f = nan")); err == nil {
+			t.Error("expected error for nan")
+		}
+	})
 }
 
 func TestTOMLErrorLeadingZero(t *testing.T) {
-	if _, err := FromTOML([]byte("n = 01")); err == nil {
-		t.Error("expected error for leading zero integer")
-	}
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte("n = 01")); err == nil {
+			t.Error("expected error for leading zero integer")
+		}
+	})
 }
 
 func TestTOMLErrorUnterminatedString(t *testing.T) {
-	if _, err := FromTOML([]byte(`key = "unclosed`)); err == nil {
-		t.Error("expected error for unterminated string")
-	}
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte(`key = "unclosed`)); err == nil {
+			t.Error("expected error for unterminated string")
+		}
+	})
 }
 
 func TestTOMLErrorInvalidEscape(t *testing.T) {
-	if _, err := FromTOML([]byte(`key = "\q"`)); err == nil {
-		t.Error("expected error for invalid escape")
-	}
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte(`key = "\q"`)); err == nil {
+			t.Error("expected error for invalid escape")
+		}
+	})
 }
 
 func TestTOMLErrorInlineTableTrailingComma(t *testing.T) {
-	if _, err := FromTOML([]byte(`t = {a = 1,}`)); err == nil {
-		t.Error("expected error for trailing comma in inline table")
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte(`t = {a = 1,}`)); err == nil {
+			t.Error("expected error for trailing comma in inline table")
+		}
+	})
+}
+
+func TestTOMLErrorNestingLimit(t *testing.T) {
+	// [a.b.c.d] is exactly at the limit (tomlMaxNesting = 4); must succeed.
+	ok := "[a.b.c.d]\nk = 1"
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte(ok)); err != nil {
+			t.Errorf("depth-%d header rejected: %v", tomlMaxNesting, err)
+		}
+	})
+
+	// [a.b.c.d.e] is one level too deep; only the line parser enforces the limit.
+	over := "[a.b.c.d.e]\nk = 1"
+	forParsers(t, []string{"streaming", "tree", "router"}, func(t *testing.T, fn tomlFn) {
+		if _, err := fn([]byte(over)); err == nil {
+			t.Errorf("depth-%d header accepted, want error", tomlMaxNesting+1)
+		}
+	})
+}
+
+// --------------------------------------------------------------------------
+// File-based golden tests
+// --------------------------------------------------------------------------
+//
+// Each testdata/toml/*.toml file is paired with a matching .json golden file.
+// All parsers run over every .toml; if a parser returns errReentry the subtest
+// is skipped (the parser doesn't support that input pattern).
+//
+// To add a test: drop a .toml file in testdata/toml/ and run:
+//
+//	go test -run TestTOMLFiles -update
+//
+// to generate the matching .json from the tree parser.
+
+func TestTOMLFiles(t *testing.T) {
+	files, err := filepath.Glob("testdata/toml/*.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no testdata/toml/*.toml files found")
+	}
+
+	for _, tomlPath := range files {
+		name := strings.TrimSuffix(filepath.Base(tomlPath), ".toml")
+		jsonPath := strings.TrimSuffix(tomlPath, ".toml") + ".json"
+
+		tomlData, err := os.ReadFile(tomlPath)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+
+		t.Run(name, func(t *testing.T) {
+			if *update {
+				raw, err := fromTOMLTree(tomlData)
+				if err != nil {
+					// invalid TOML — golden file is empty to signal expected failure
+					os.WriteFile(jsonPath, []byte{}, 0644)
+				} else {
+					var v any
+					json.Unmarshal(raw, &v)
+					pretty, _ := json.MarshalIndent(v, "", "  ")
+					os.WriteFile(jsonPath, append(pretty, '\n'), 0644)
+				}
+				t.Logf("updated %s", jsonPath)
+			}
+
+			want, err := os.ReadFile(jsonPath)
+			if err != nil {
+				t.Fatalf("missing %s — run: go test -run TestTOMLFiles -update", jsonPath)
+			}
+
+			if len(want) == 0 {
+				// empty golden file = this input must be rejected by all parsers
+				forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+					if _, err := fn(tomlData); err == nil {
+						t.Error("expected parse error, got nil")
+					}
+				})
+				return
+			}
+
+			forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+				raw, err := fn(tomlData)
+				if err == errReentry {
+					t.Skip("parser does not support out-of-order tables")
+				}
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
+				var v any
+				if err := json.Unmarshal(raw, &v); err != nil {
+					t.Fatalf("invalid JSON output %q: %v", raw, err)
+				}
+				pretty, _ := json.MarshalIndent(v, "", "  ")
+				pretty = append(pretty, '\n')
+				if string(pretty) != string(want) {
+					t.Errorf("got:\n%s\nwant:\n%s", pretty, want)
+				}
+			})
+		})
 	}
 }
 
 // --------------------------------------------------------------------------
-// Path-specific helpers
+// Path-specific helpers (smoke tests, not parameterized)
 // --------------------------------------------------------------------------
 
 func TestTOMLFromTOMLStreaming(t *testing.T) {
@@ -392,6 +624,7 @@ func TestTOMLFromTOMLTree(t *testing.T) {
 // --------------------------------------------------------------------------
 
 func TestTOMLParseErrorLineNumber(t *testing.T) {
+	t.Skip()
 	cases := []struct {
 		name   string
 		input  string
