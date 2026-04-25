@@ -81,7 +81,7 @@ func ExampleFromFrontMatter() {
 		Author string `json:"author"`
 	}
 
-	src := []byte("---\ntitle: Hello World\nauthor: alice\n---\nThis is the body.\n")
+	src := []byte("---\ntitle: Hello World\nauthor: Alice\n---\nThis is the body.\n")
 
 	meta, body, err := tojson.FromFrontMatter(src)
 	if err != nil {
@@ -98,7 +98,7 @@ func ExampleFromFrontMatter() {
 	fmt.Printf("body: %s", body)
 	// Output:
 	// title: Hello World
-	// author: alice
+	// author: Alice
 	// body: This is the body.
 }
 
