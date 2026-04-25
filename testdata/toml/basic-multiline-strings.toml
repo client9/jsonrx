@@ -1,0 +1,14 @@
+# Multiline strings: basic (""") and literal (''').
+# The first newline after the opening delimiter is trimmed.
+
+basic = """
+line one
+line two
+"""
+
+trimmed = """hello \
+   world"""
+
+literal = '''
+raw \n no escape
+'''

@@ -1,0 +1,12 @@
+# Ordered table headers — all parsers handle this on the fast path.
+# Siblings under a parent are fine as long as the parent is not re-entered
+# after an unrelated section has intervened.
+
+[fruit.apple]
+color = "red"
+
+[fruit.orange]
+color = "orange"
+
+[animal]
+legs = 4

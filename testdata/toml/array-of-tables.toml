@@ -1,0 +1,13 @@
+# Array of tables (in-order) — all parsers handle this.
+
+[[products]]
+name = "Hammer"
+price = 9.99
+
+[[products]]
+name = "Nail"
+price = 0.05
+
+[[products]]
+name = "Screw"
+price = 0.10

@@ -1,0 +1,7 @@
+# Inline tables — braced key=value pairs on a single line.
+
+point = {x = 1, y = 2}
+empty = {}
+nested = {a = {b = 42}}
+server = {host = "localhost", port = 8080}
+dotted = {a.b = 1, a.c = 2}

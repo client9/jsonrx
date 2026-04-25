@@ -1,0 +1,5 @@
+{
+  "basic": "line one\nline two\n",
+  "literal": "raw \\n no escape\n",
+  "trimmed": "hello world"
+}

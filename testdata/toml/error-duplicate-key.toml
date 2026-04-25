@@ -1,0 +1,4 @@
+# Duplicate key — must be rejected by all parsers
+pi = 3.14
+e = 2.717
+pi = 3.14

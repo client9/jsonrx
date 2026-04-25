@@ -1,0 +1,12 @@
+# Inline arrays, including nested and multiline forms.
+
+nums = [1, 2, 3]
+mixed = [1, "two", true]
+nested = [[1, 2], [3, 4]]
+empty = []
+trailing = [1, 2,]
+multiline = [
+  10,
+  20,
+  30,
+]

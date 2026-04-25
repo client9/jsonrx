@@ -1,0 +1,12 @@
+# Out-of-order table re-entry — requires the tree parser.
+# [a] is closed when [b] begins; [a.c] must re-open it.
+# The streaming parser returns errReentry for this input.
+
+[a]
+x = 1
+
+[b]
+y = 2
+
+[a.c]
+z = 3

@@ -1,0 +1,7 @@
+# Dotted keys produce nested objects without explicit table headers.
+
+a.b = 1
+a.c = 2
+x.y.z = "deep"
+server.host = "localhost"
+server.port = 8080

@@ -1,0 +1,14 @@
+# Array of tables with an intervening section — requires tree parser.
+# [[items]] reappears after [meta] closes the first batch.
+# The streaming parser returns errReentry for this input.
+
+[[items]]
+name = "first"
+value = 1
+
+[meta]
+version = 2
+
+[[items]]
+name = "second"
+value = 2

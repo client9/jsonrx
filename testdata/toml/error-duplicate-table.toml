@@ -1,0 +1,7 @@
+# Duplicate table header — must be rejected by all parsers
+[foo]
+x = 1
+[bar]
+z=3
+[foo]
+y = 2
