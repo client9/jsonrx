@@ -287,7 +287,7 @@ func (tx *tokenizer) number() (token, error) {
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			//
 		case '.', 'e':
-			// it's definitely not an integer
+			// it's not an integer
 			// if already marked as 'w', keep as 'w'
 			if kind == '0' {
 				kind = '1'
