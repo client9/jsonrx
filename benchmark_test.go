@@ -2,6 +2,7 @@ package tojson
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,9 +11,13 @@ import (
 	"testing"
 )
 
+//go:embed testdata/bench.toml
+var benchTOML string
+
 var frontmatter1JSONBytes = []byte(frontmatter1JSON)
 var frontmatter1YAMLBytes = []byte(frontmatter1YAML)
 var frontmatter1TOMLBytes = []byte(frontmatter1TOML)
+var benchTOMLBytes = []byte(benchTOML)
 
 func BenchmarkFromJSONVariantOnly(b *testing.B) {
 	b.ReportAllocs()
@@ -82,6 +87,73 @@ func BenchmarkFromTOMLTreeOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := fromTOMLTree(frontmatter1TOMLBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFromTOMLLineOnly(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := fromTOMLLine(frontmatter1TOMLBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// Small-input benchmarks compare streaming vs line-by-line vs tree on frontmatter1TOML.
+
+func BenchmarkFromTOMLStreamSmall(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := tomlConvertStreaming(frontmatter1TOMLBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFromTOMLLineSmall(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := tomlConvertLine(frontmatter1TOMLBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFromTOMLTreeSmall(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := tomlConvertTree(frontmatter1TOMLBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// Large-input benchmarks compare streaming vs line-by-line vs tree on bench.toml.
+
+func BenchmarkFromTOMLStreamLarge(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := tomlConvertStreaming(benchTOMLBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFromTOMLLineLarge(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := tomlConvertLine(benchTOMLBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFromTOMLTreeLarge(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := tomlConvertTree(benchTOMLBytes); err != nil {
 			b.Fatal(err)
 		}
 	}

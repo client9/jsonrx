@@ -141,6 +141,57 @@ func TestTOMLTableReentry(t *testing.T) {
 		`{"a":{"x":1,"c":{"z":3}},"b":{"y":2}}`)
 }
 
+func TestTOMLLineOrderedTablesStayOnFastPath(t *testing.T) {
+	got, err := tomlConvertLine([]byte("[fruit.apple]\nx = 1\n[fruit.orange]\ny = 2\n[animal]\nz = 3"))
+	if err != nil {
+		t.Fatalf("tomlConvertLine error: %v", err)
+	}
+	want := `{"fruit":{"apple":{"x":1},"orange":{"y":2}},"animal":{"z":3}}`
+	if string(got) != want {
+		t.Fatalf("tomlConvertLine = %s, want %s", got, want)
+	}
+}
+
+func TestTOMLLineOutOfOrderTableReentry(t *testing.T) {
+	_, err := tomlConvertLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[fruit.orange]\ny = 2"))
+	if err != errReentry {
+		t.Fatalf("tomlConvertLine error = %v, want errReentry", err)
+	}
+}
+
+func TestTOMLLineOutOfOrderTableFallback(t *testing.T) {
+	got, err := fromTOMLLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[fruit.orange]\ny = 2"))
+	if err != nil {
+		t.Fatalf("fromTOMLLine error: %v", err)
+	}
+	want := `{"fruit":{"apple":{"x":1},"orange":{"y":2}},"animal":{"z":3}}`
+	if string(got) != want {
+		t.Fatalf("fromTOMLLine = %s, want %s", got, want)
+	}
+}
+
+func TestTOMLLineQuotedDotTableDoesNotCollideWithDottedPath(t *testing.T) {
+	got, err := tomlConvertLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[\"fruit.apple\"]\ny = 2"))
+	if err != nil {
+		t.Fatalf("tomlConvertLine error: %v", err)
+	}
+	want := `{"fruit":{"apple":{"x":1}},"animal":{"z":3},"fruit.apple":{"y":2}}`
+	if string(got) != want {
+		t.Fatalf("tomlConvertLine = %s, want %s", got, want)
+	}
+}
+
+func TestTOMLLineQuotedDotAoTDoesNotCollideWithDottedPath(t *testing.T) {
+	got, err := tomlConvertLine([]byte("[[fruit.apple]]\nx = 1\n[[\"fruit.apple\"]]\ny = 2"))
+	if err != nil {
+		t.Fatalf("tomlConvertLine error: %v", err)
+	}
+	want := `{"fruit":{"apple":[{"x":1}]},"fruit.apple":[{"y":2}]}`
+	if string(got) != want {
+		t.Fatalf("tomlConvertLine = %s, want %s", got, want)
+	}
+}
+
 // --------------------------------------------------------------------------
 // Array of tables
 // --------------------------------------------------------------------------
