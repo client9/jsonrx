@@ -66,15 +66,18 @@ func dotPath(path [][]byte) string {
 // the temporary inline objects for a and a.b) and are collapsed back to depth
 // zero before any new header or bare key/value pair is processed.
 //
-// state, accum, and startLine drive the multi-line value sub-state machine:
-// when a value begins with """, ''', or an unterminated [, subsequent input
-// lines are appended to accum until the matching terminator is found, at
-// which point the accumulated bytes are parsed and emitted as a single JSON
-// value. arrayDepth/arrayDouble/arraySingle are the bookkeeping fields used
-// by scanArrayLine to track bracket nesting and quoted regions while in the
+// state, accumStart, and startLine drive the multi-line value sub-state
+// machine: when a value begins with """, ”', or an unterminated [,
+// accumStart records the byte offset in the input slice where the value's
+// content begins; the outer loop continues consuming lines until the
+// matching terminator is found, at which point input[accumStart:lineEnd]
+// is parsed and emitted as a single JSON value.
+// arrayDepth/arrayDouble/arraySingle are the bookkeeping fields used by
+// scanArrayLine to track bracket nesting and quoted regions while in the
 // tomlStateInlineArray state.
 type tomlLineParser struct {
 	buf         bytes.Buffer
+	input       []byte                        // the source slice; sliced on terminator to feed the multi-line parsers
 	stackBuf    [tomlMaxNesting + 1]tomlFrame // fixed backing; index 0 is the root frame
 	stackLen    int                           // number of active frames in stackBuf
 	closed      tomlClosedTables
@@ -82,7 +85,7 @@ type tomlLineParser struct {
 	inlineComma []bool
 	inlineUsed  [][][]byte
 	state       int
-	accum       []byte
+	accumStart  int
 	startLine   int
 	arrayDepth  int
 	arrayDouble bool
@@ -277,40 +280,31 @@ func (p *tomlLineParser) scanArrayLine(b []byte) bool {
 	return false
 }
 
-// appendAccumLine appends a newline followed by line to the multi-line
-// accumulator. The leading '\n' restores the line break that was consumed
-// when the outer loop split on newlines, so the buffered content matches the
-// original source byte-for-byte.
-func (p *tomlLineParser) appendAccumLine(line []byte) {
-	p.accum = append(p.accum, '\n')
-	p.accum = append(p.accum, line...)
-}
-
-// finishAccumValue marks the just-emitted value as present, clears the
-// accumulator, and returns the parser to tomlStateNormal.
+// finishAccumValue marks the just-emitted value as present and returns the
+// parser to tomlStateNormal.
 func (p *tomlLineParser) finishAccumValue() {
 	p.setTopNC(true)
-	p.accum = p.accum[:0]
 	p.state = tomlStateNormal
 }
 
-// handleAccumLine feeds line into whichever multi-line accumulator is active.
-// The first return reports whether the line was consumed by accumulation
-// (true) or should be processed as ordinary input (false). When the
-// terminator for the current state is found, the accumulated value is parsed
-// and emitted before returning true.
-func (p *tomlLineParser) handleAccumLine(line []byte) (bool, error) {
+// handleAccumLine drives the multi-line accumulation states. The first
+// return reports whether the line was consumed by accumulation (true) or
+// should be processed as ordinary input (false). When the terminator for
+// the current state is found, input[p.accumStart:lineEnd] is handed to the
+// matching multi-line parser and emitted as a single JSON value before
+// returning true. lineEnd is the offset in p.input of the byte just past
+// the current line's content (i.e. the '\n' position, or len(input) at EOF).
+func (p *tomlLineParser) handleAccumLine(line []byte, lineEnd int) (bool, error) {
 	// String content is raw here; stripping comments or whitespace would corrupt
 	// multiline values.
 	switch p.state {
 	case tomlStateNormal:
 		return false, nil
 	case tomlStateMLBasic:
-		p.appendAccumLine(line)
 		if !bytes.Contains(line, []byte(`"""`)) {
 			return true, nil
 		}
-		str, _, err := parseTOMLMultilineBasic(p.accum, nil, 0)
+		str, _, err := parseTOMLMultilineBasic(p.input[p.accumStart:lineEnd], nil, 0)
 		if err != nil {
 			return true, atLineCol(p.startLine, 0, err)
 		}
@@ -318,11 +312,10 @@ func (p *tomlLineParser) handleAccumLine(line []byte) (bool, error) {
 		p.finishAccumValue()
 		return true, nil
 	case tomlStateMLLiteral:
-		p.appendAccumLine(line)
 		if !bytes.Contains(line, []byte("'''")) {
 			return true, nil
 		}
-		str, _, err := parseTOMLMultilineLiteral(p.accum, nil, 0)
+		str, _, err := parseTOMLMultilineLiteral(p.input[p.accumStart:lineEnd], nil, 0)
 		if err != nil {
 			return true, atLineCol(p.startLine, 0, err)
 		}
@@ -330,11 +323,10 @@ func (p *tomlLineParser) handleAccumLine(line []byte) (bool, error) {
 		p.finishAccumValue()
 		return true, nil
 	case tomlStateInlineArray:
-		p.appendAccumLine(line)
 		if !p.scanArrayLine(line) {
 			return true, nil
 		}
-		if _, err := writeTOMLInlineArray(p.accum, nil, 0, &p.buf); err != nil {
+		if _, err := writeTOMLInlineArray(p.input[p.accumStart:lineEnd], nil, 0, &p.buf); err != nil {
 			return true, atLineCol(p.startLine, 0, err)
 		}
 		p.finishAccumValue()
@@ -477,12 +469,17 @@ func (p *tomlLineParser) openInlinePrefix(prefix [][]byte, lineNum, leading int)
 }
 
 // startMultilineValue switches the parser into one of the multi-line
-// accumulation states, seeding the accumulator with rest (the value text
-// from the originating line) and recording lineNum as the value's start
-// line for error messages. For inline arrays it also primes the bracket and
-// quote tracking by scanning the seed bytes.
+// accumulation states, recording the offset of rest within p.input as the
+// start of the value and lineNum as the value's start line for error
+// messages. For inline arrays it also primes the bracket and quote tracking
+// by scanning the seed bytes.
+//
+// rest must be a sub-slice of p.input that has only been narrowed via
+// 2-arg slicing (TrimRight, TrimSpace, TrimLeft, s[:n], s[a:]); the
+// cap-difference trick below depends on that invariant to recover rest's
+// offset without an explicit position parameter.
 func (p *tomlLineParser) startMultilineValue(rest []byte, lineNum, mlState int) {
-	p.accum = append(p.accum[:0], rest...)
+	p.accumStart = cap(p.input) - cap(rest)
 	p.state = mlState
 	p.startLine = lineNum
 	if mlState == tomlStateInlineArray {
@@ -521,6 +518,7 @@ func fromTOMLLine(input []byte) ([]byte, error) {
 // key/value, and accumulation handlers, and returns the emitted JSON
 // document.
 func (p *tomlLineParser) convert(input []byte) ([]byte, error) {
+	p.input = input
 	var pathBuf [4][]byte
 	lineNum := 0
 	pos := 0
@@ -529,16 +527,19 @@ func (p *tomlLineParser) convert(input []byte) ([]byte, error) {
 		// Lazily scan the next line without pre-splitting the whole input.
 		nl := bytes.IndexByte(input[pos:], '\n')
 		var line []byte
+		var lineEnd int
 		if nl < 0 {
 			line = input[pos:]
+			lineEnd = len(input)
 			pos = len(input)
 		} else {
 			line = input[pos : pos+nl]
+			lineEnd = pos + nl
 			pos += nl + 1
 		}
 		lineNum++
 
-		if handled, err := p.handleAccumLine(line); handled || err != nil {
+		if handled, err := p.handleAccumLine(line, lineEnd); handled || err != nil {
 			if err != nil {
 				return nil, err
 			}
