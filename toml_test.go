@@ -575,7 +575,9 @@ func TestTOMLFiles(t *testing.T) {
 
 			forParsers(t, nil, func(t *testing.T, fn tomlFn) {
 				raw, err := fn(tomlData)
-				if err == errReentry {
+				// TODO: not quite right.  Need to add condition if the parser is 'streaming' or 'line'
+				//  the tree based parser should work, and not error
+				if err == errReentry && strings.Contains(name, "reentry") {
 					t.Skip("parser does not support out-of-order tables")
 				}
 				if err != nil {
