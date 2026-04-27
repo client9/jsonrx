@@ -110,7 +110,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 	buf.WriteByte('{')
 
 	stack := make([]streamFrame, 1, 8)
-	closed := make(map[string]struct{}, 4)
+	var closed tomlLineClosedTables
 
 	var inlineKeys [][]byte
 	var inlineComma []bool
@@ -155,16 +155,26 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 	closeSectionsTo := func(depth int) {
 		for len(stack) > depth {
 			top := stack[len(stack)-1]
+			closed.mark(stack)
 			stack = stack[:len(stack)-1]
-			if top.dotPath != "" {
-				closed[top.dotPath] = struct{}{}
-			}
 			if top.isAoT {
 				buf.WriteString("}]")
 			} else {
 				buf.WriteByte('}')
 			}
 		}
+	}
+
+	currentSectionIs := func(path [][]byte) bool {
+		if len(path) != len(stack)-1 {
+			return false
+		}
+		for i := range path {
+			if !bytes.Equal(stack[i+1].key, path[i]) {
+				return false
+			}
+		}
+		return true
 	}
 
 	openSection := func(path [][]byte, isAoT bool) error {
@@ -177,7 +187,7 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 
 		if isAoT && len(stack) > 1 {
 			top := &stack[len(stack)-1]
-			if top.isAoT && top.dotPath == fullDotPath {
+			if top.isAoT && currentSectionIs(path) {
 				buf.WriteString("},{")
 				top.needComma = false
 				top.usedKeys = top.usedKeys[:0]
@@ -193,16 +203,8 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 			cd++
 		}
 
-		for i := cd; i < len(path); i++ {
-			var dp string
-			if i == len(path)-1 {
-				dp = fullDotPath
-			} else {
-				dp = string(bytes.Join(path[:i+1], []byte(".")))
-			}
-			if _, exists := closed[dp]; exists {
-				return errReentry
-			}
+		if closed.reopens(path, cd) {
+			return errReentry
 		}
 
 		closeSectionsTo(cd + 1)
@@ -245,15 +247,8 @@ func tomlConvertStreaming(input []byte) ([]byte, error) {
 				buf.WriteByte('{')
 			}
 			top.needComma = true
-			var dp string
-			if i == len(path)-1 {
-				dp = fullDotPath
-			} else {
-				dp = string(bytes.Join(path[:i+1], []byte(".")))
-			}
 			stack = append(stack, streamFrame{
 				key:       path[i],
-				dotPath:   dp,
 				isAoT:     isAoTFrame,
 				explicit:  i == len(path)-1 && !isAoT,
 				needComma: false,

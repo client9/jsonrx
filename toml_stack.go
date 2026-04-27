@@ -7,7 +7,6 @@ import (
 // streamFrame tracks one open TOML section on the streaming stack.
 type streamFrame struct {
 	key       []byte
-	dotPath   string   // full dot-joined path (string for use as map key)
 	isAoT     bool     // opened by [[...]]
 	explicit  bool     // set when a [table] header explicitly named this frame
 	needComma bool     // next entry in this object needs a leading comma

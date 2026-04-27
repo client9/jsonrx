@@ -236,18 +236,11 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 			p.buf.WriteByte('{')
 		}
 		top.needComma = true
-		var dp string
-		if i == len(path)-1 {
-			dp = fullDotPath
-		} else {
-			dp = string(bytes.Join(path[:i+1], []byte(".")))
-		}
 		if p.stackLen >= len(p.stackBuf) {
 			return fmt.Errorf("table nesting exceeds maximum depth of %d", tomlMaxNesting)
 		}
 		p.stackBuf[p.stackLen] = streamFrame{
 			key:      path[i],
-			dotPath:  dp,
 			isAoT:    isAoTFrame,
 			explicit: i == len(path)-1 && !isAoT,
 		}
