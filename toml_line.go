@@ -67,7 +67,7 @@ func dotPath(path [][]byte) string {
 // zero before any new header or bare key/value pair is processed.
 //
 // state, accum, and startLine drive the multi-line value sub-state machine:
-// when a value begins with """, ”', or an unterminated [, subsequent input
+// when a value begins with """, ''', or an unterminated [, subsequent input
 // lines are appended to accum until the matching terminator is found, at
 // which point the accumulated bytes are parsed and emitted as a single JSON
 // value. arrayDepth/arrayDouble/arraySingle are the bookkeeping fields used
