@@ -87,6 +87,7 @@ type tomlLineParser struct {
 	state       int
 	accumStart  int
 	startLine   int
+	startCol    int // 0-based column of the first byte of the multi-line value, for error attribution
 	arrayDepth  int
 	arrayDouble bool
 	arraySingle bool
@@ -310,7 +311,7 @@ func (p *tomlLineParser) handleAccumLine(line []byte, lineEnd int) (bool, error)
 		}
 		str, _, err := parseTOMLMultilineBasic(p.input[p.accumStart:lineEnd], nil, 0)
 		if err != nil {
-			return true, atLineCol(p.startLine, 0, err)
+			return true, atLineCol(p.startLine, p.startCol, err)
 		}
 		writeJSONString(str, &p.buf)
 		p.finishAccumValue()
@@ -321,7 +322,7 @@ func (p *tomlLineParser) handleAccumLine(line []byte, lineEnd int) (bool, error)
 		}
 		str, _, err := parseTOMLMultilineLiteral(p.input[p.accumStart:lineEnd], nil, 0)
 		if err != nil {
-			return true, atLineCol(p.startLine, 0, err)
+			return true, atLineCol(p.startLine, p.startCol, err)
 		}
 		writeJSONString(str, &p.buf)
 		p.finishAccumValue()
@@ -331,7 +332,7 @@ func (p *tomlLineParser) handleAccumLine(line []byte, lineEnd int) (bool, error)
 			return true, nil
 		}
 		if _, err := writeTOMLInlineArray(p.input[p.accumStart:lineEnd], nil, 0, &p.buf); err != nil {
-			return true, atLineCol(p.startLine, 0, err)
+			return true, atLineCol(p.startLine, p.startCol, err)
 		}
 		p.finishAccumValue()
 		return true, nil
@@ -482,10 +483,11 @@ func (p *tomlLineParser) openInlinePrefix(prefix [][]byte, lineNum, leading int)
 // 2-arg slicing (TrimRight, TrimSpace, TrimLeft, s[:n], s[a:]); the
 // cap-difference trick below depends on that invariant to recover rest's
 // offset without an explicit position parameter.
-func (p *tomlLineParser) startMultilineValue(rest []byte, lineNum, mlState int) {
+func (p *tomlLineParser) startMultilineValue(rest []byte, lineNum, valCol, mlState int) {
 	p.accumStart = cap(p.input) - cap(rest)
 	p.state = mlState
 	p.startLine = lineNum
+	p.startCol = valCol
 	if mlState == tomlStateInlineArray {
 		p.arrayDepth, p.arrayDouble, p.arraySingle = 0, false, false
 		p.scanArrayLine(rest)
@@ -498,7 +500,7 @@ func (p *tomlLineParser) startMultilineValue(rest []byte, lineNum, mlState int) 
 // the 1-based column of the first byte of rest, used for error positions.
 func (p *tomlLineParser) writeValue(rest []byte, lineNum, valCol int) error {
 	if ml, mlState := multilineStart(rest); ml {
-		p.startMultilineValue(rest, lineNum, mlState)
+		p.startMultilineValue(rest, lineNum, valCol, mlState)
 		return nil
 	}
 	if _, err := writeTOMLValue(rest, nil, 0, &p.buf); err != nil {
@@ -524,7 +526,10 @@ func fromTOMLLine(input []byte) ([]byte, error) {
 func (p *tomlLineParser) convert(input []byte) ([]byte, error) {
 	p.input = input
 	var pathBuf [4][]byte
-	lineNum := 0
+	// lineNum is the 0-based index of the line currently being processed.
+	// It is incremented at the top of each loop iteration; -1 here means the
+	// first iteration produces lineNum == 0 — the convention atLineCol expects.
+	lineNum := -1
 	pos := 0
 
 	for pos < len(input) {
@@ -584,12 +589,13 @@ func (p *tomlLineParser) convert(input []byte) ([]byte, error) {
 			}
 			writeJSONString(key, &p.buf)
 			p.buf.WriteByte(':')
+			valCol := leading + len(trimmed) - len(rest)
 			if ml, mlState := multilineStart(rest); ml {
-				p.startMultilineValue(rest, lineNum, mlState)
+				p.startMultilineValue(rest, lineNum, valCol, mlState)
 				continue
 			}
 			if _, err := writeTOMLValue(rest, nil, 0, &p.buf); err != nil {
-				return nil, atLineCol(lineNum, leading+len(trimmed)-len(rest), err)
+				return nil, atLineCol(lineNum, valCol, err)
 			}
 			p.setTopNC(true)
 		}
@@ -600,7 +606,7 @@ func (p *tomlLineParser) convert(input []byte) ([]byte, error) {
 		if p.state == tomlStateInlineArray {
 			what = "inline array"
 		}
-		return nil, atLineCol(p.startLine, 0, fmt.Errorf("unterminated %s", what))
+		return nil, atLineCol(p.startLine, p.startCol, fmt.Errorf("unterminated %s", what))
 	}
 
 	p.closeInlineTo(0)
