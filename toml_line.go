@@ -47,6 +47,15 @@ func multilineStart(s []byte) (bool, int) {
 // Inputs that nest deeper return an error rather than allocating unboundedly.
 const tomlMaxNesting = 4
 
+// dotPath joins the segments of path with '.' for use in human-readable
+// error messages. Called only on error paths; do not use on the hot path.
+func dotPath(path [][]byte) string {
+	if len(path) == 1 {
+		return string(path[0])
+	}
+	return string(bytes.Join(path, []byte(".")))
+}
+
 // tomlLineParser holds the mutable state shared across methods during a single
 // fromTOMLLine call.
 //
@@ -58,7 +67,7 @@ const tomlMaxNesting = 4
 // zero before any new header or bare key/value pair is processed.
 //
 // state, accum, and startLine drive the multi-line value sub-state machine:
-// when a value begins with """, ''', or an unterminated [, subsequent input
+// when a value begins with """, ”', or an unterminated [, subsequent input
 // lines are appended to accum until the matching terminator is found, at
 // which point the accumulated bytes are parsed and emitted as a single JSON
 // value. arrayDepth/arrayDouble/arraySingle are the bookkeeping fields used
@@ -67,7 +76,7 @@ const tomlMaxNesting = 4
 type tomlLineParser struct {
 	buf         bytes.Buffer
 	stackBuf    [tomlMaxNesting + 1]tomlFrame // fixed backing; index 0 is the root frame
-	stackLen    int                             // number of active frames in stackBuf
+	stackLen    int                           // number of active frames in stackBuf
 	closed      tomlClosedTables
 	inlineKeys  [][]byte
 	inlineComma []bool
@@ -173,12 +182,6 @@ func (p *tomlLineParser) currentSectionIs(path [][]byte) bool {
 // a fresh chain. Returns errReentry if path would re-open a table that has
 // already been closed by a prior header.
 func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
-	var fullDotPath string
-	if len(path) == 1 {
-		fullDotPath = string(path[0])
-	} else {
-		fullDotPath = string(bytes.Join(path, []byte(".")))
-	}
 	if isAoT && p.stackLen > 1 {
 		top := &p.stackBuf[p.stackLen-1]
 		if top.isAoT && p.currentSectionIs(path) {
@@ -203,7 +206,7 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 		frame := &p.stackBuf[p.stackLen-1]
 		if !isAoT {
 			if frame.explicit {
-				return fmt.Errorf("duplicate table header [%s]", fullDotPath)
+				return fmt.Errorf("duplicate table header [%s]", dotPath(path))
 			}
 			frame.explicit = true
 		}
@@ -213,13 +216,7 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 		top := &p.stackBuf[p.stackLen-1]
 		for _, k := range top.usedKeys {
 			if bytes.Equal(k, path[i]) {
-				var dp string
-				if i == len(path)-1 {
-					dp = fullDotPath
-				} else {
-					dp = string(bytes.Join(path[:i+1], []byte(".")))
-				}
-				return fmt.Errorf("cannot define table %q: key already has a value", dp)
+				return fmt.Errorf("cannot define table %q: key already has a value", dotPath(path[:i+1]))
 			}
 		}
 		top.usedKeys = append(top.usedKeys, path[i])
@@ -523,11 +520,6 @@ func fromTOMLLine(input []byte) ([]byte, error) {
 // convert walks input one line at a time, dispatching to the header,
 // key/value, and accumulation handlers, and returns the emitted JSON
 // document.
-//
-// TODO: compute fullDotPath lazily in openSection — it is only used on error
-// paths but currently allocates on every header.
-// TODO: collapse the duplicate dp computation in openSection's
-// duplicate-key error branch; for the leaf case it already equals fullDotPath.
 func (p *tomlLineParser) convert(input []byte) ([]byte, error) {
 	var pathBuf [4][]byte
 	lineNum := 0
@@ -617,4 +609,3 @@ func (p *tomlLineParser) convert(input []byte) ([]byte, error) {
 	p.buf.WriteByte('}')
 	return p.buf.Bytes(), nil
 }
-
