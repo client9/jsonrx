@@ -3,10 +3,31 @@
 nums = [1, 2, 3]
 mixed = [1, "two", true]
 nested = [[1, 2], [3, 4]]
-empty = []
+empty1 = []
+empty2 = [
+]
+
 trailing = [1, 2,]
-multiline = [
+multiline1 = [
   10,
   20,
   30,
 ]
+multiline2 = [10,
+  20,
+  30,
+]
+multiline3 = [10, 20,
+ 30,
+]
+multiline4 = [10, 20, 30,
+]
+multiline5 = [10
+   ,
+   20
+   ,
+   30
+   ,
+]
+multiline6 = [10 , 20 , 30
+   ,]
