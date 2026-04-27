@@ -1,10 +1,9 @@
 // toml_line.go — TOML→JSON converter using a top-level line-by-line state machine.
 //
-// tomlConvertLine is an alternative to tomlConvertStreaming that replaces the
-// upfront bytes.Split + per-helper inner-loop design with a single outer loop that
-// lazily scans newlines and drives a four-state machine. Multiline constructs
-// ("""...""", '''...''', multi-line inline arrays) accumulate content across
-// iterations rather than pulling lines from a pre-split slice inside helper functions.
+// A single outer loop lazily scans newlines and drives a four-state machine.
+// Multiline constructs ("""...""", '''...''', multi-line inline arrays)
+// accumulate content across iterations rather than pulling lines from a
+// pre-split slice inside helper functions.
 //
 // TOML's root is always a table (the spec defines the document as a hash table),
 // so the output always begins and ends with { }.

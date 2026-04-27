@@ -17,15 +17,14 @@ var tomlParsers = []struct {
 	name string
 	fn   tomlFn
 }{
-	{"streaming", fromTOMLStreaming},
 	{"line", fromTOMLLine},
 	{"tree", fromTOMLTree},
 	{"router", FromTOML},
 }
 
 // skipStreaming is the skip list for tests requiring out-of-order table re-entry,
-// which the streaming parser cannot handle (it returns errReentry instead of falling back).
-var skipStreaming = []string{"streaming", "line"}
+// which the line parser cannot handle (it returns errReentry instead of falling back).
+var skipStreaming = []string{"line"}
 
 // forParsers runs f as a subtest for each parser not in the skip list.
 func forParsers(t *testing.T, skip []string, f func(*testing.T, tomlFn)) {
@@ -600,16 +599,6 @@ func TestTOMLFiles(t *testing.T) {
 // --------------------------------------------------------------------------
 // Path-specific helpers (smoke tests, not parameterized)
 // --------------------------------------------------------------------------
-
-func TestTOMLFromTOMLStreaming(t *testing.T) {
-	got, err := fromTOMLStreaming([]byte("k = 1"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != `{"k":1}` {
-		t.Errorf("got %q, want %q", got, `{"k":1}`)
-	}
-}
 
 func TestTOMLFromTOMLTree(t *testing.T) {
 	got, err := fromTOMLTree([]byte("k = 1"))
