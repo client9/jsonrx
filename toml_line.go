@@ -48,17 +48,17 @@ func multilineStart(s []byte) (bool, int) {
 const tomlMaxNesting = 4
 
 // tomlLineParser holds the mutable state shared across methods during a single
-// tomlConvertLine call.
+// fromTOMLLine call.
 //
 // The parser maintains two parallel stacks. stackBuf/stackLen tracks the
 // section nesting introduced by [table] and [[array]] headers; entries are
-// streamFrame values keyed by header segment. inlineKeys/inlineComma/inlineUsed
+// tomlFrame values keyed by header segment. inlineKeys/inlineComma/inlineUsed
 // track dotted-key prefixes opened on the current line (e.g. a.b.c = 1 opens
 // the temporary inline objects for a and a.b) and are collapsed back to depth
 // zero before any new header or bare key/value pair is processed.
 //
 // state, accum, and startLine drive the multi-line value sub-state machine:
-// when a value begins with """, ”', or an unterminated [, subsequent input
+// when a value begins with """, ''', or an unterminated [, subsequent input
 // lines are appended to accum until the matching terminator is found, at
 // which point the accumulated bytes are parsed and emitted as a single JSON
 // value. arrayDepth/arrayDouble/arraySingle are the bookkeeping fields used
@@ -66,9 +66,9 @@ const tomlMaxNesting = 4
 // tomlStateInlineArray state.
 type tomlLineParser struct {
 	buf         bytes.Buffer
-	stackBuf    [tomlMaxNesting + 1]streamFrame // fixed backing; index 0 is the root frame
+	stackBuf    [tomlMaxNesting + 1]tomlFrame // fixed backing; index 0 is the root frame
 	stackLen    int                             // number of active frames in stackBuf
-	closed      tomlLineClosedTables
+	closed      tomlClosedTables
 	inlineKeys  [][]byte
 	inlineComma []bool
 	inlineUsed  [][][]byte
@@ -238,7 +238,7 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 		if p.stackLen >= len(p.stackBuf) {
 			return fmt.Errorf("table nesting exceeds maximum depth of %d", tomlMaxNesting)
 		}
-		p.stackBuf[p.stackLen] = streamFrame{
+		p.stackBuf[p.stackLen] = tomlFrame{
 			key:      path[i],
 			isAoT:    isAoTFrame,
 			explicit: i == len(path)-1 && !isAoT,
@@ -511,15 +511,24 @@ func (p *tomlLineParser) writeValue(rest []byte, lineNum, valCol int) error {
 }
 
 // fromTOMLLine is the entry point for the line-based TOML→JSON converter.
-// It walks input one line at a time, dispatching to the header, key/value,
-// and accumulation handlers, and returns the emitted JSON document. A
-// returned errReentry indicates the caller should fall back to a stricter
+// A returned errReentry indicates the caller should fall back to a stricter
 // parser that handles out-of-order table re-entry.
 func fromTOMLLine(input []byte) ([]byte, error) {
 	p := &tomlLineParser{stackLen: 1} // stackBuf[0] is the root frame, zero-initialised
 	p.buf.Grow(len(input))
 	p.buf.WriteByte('{')
+	return p.convert(input)
+}
 
+// convert walks input one line at a time, dispatching to the header,
+// key/value, and accumulation handlers, and returns the emitted JSON
+// document.
+//
+// TODO: compute fullDotPath lazily in openSection — it is only used on error
+// paths but currently allocates on every header.
+// TODO: collapse the duplicate dp computation in openSection's
+// duplicate-key error branch; for the leaf case it already equals fullDotPath.
+func (p *tomlLineParser) convert(input []byte) ([]byte, error) {
 	var pathBuf [4][]byte
 	lineNum := 0
 	pos := 0
@@ -609,6 +618,3 @@ func fromTOMLLine(input []byte) ([]byte, error) {
 	return p.buf.Bytes(), nil
 }
 
-// tomlConvertLine is the raw line-by-line parser with no fallback.
-// It returns errReentry when out-of-order table re-entry is detected.
-func tomlConvertLine(input []byte) ([]byte, error) { return fromTOMLLine(input) }

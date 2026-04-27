@@ -97,7 +97,7 @@ func BenchmarkFromTOMLTreeOnly(b *testing.B) {
 func BenchmarkFromTOMLLineSmall(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := tomlConvertLine(frontmatter1TOMLBytes); err != nil {
+		if _, err := fromTOMLLine(frontmatter1TOMLBytes); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -117,7 +117,7 @@ func BenchmarkFromTOMLTreeSmall(b *testing.B) {
 func BenchmarkFromTOMLLineLarge(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := tomlConvertLine(benchTOMLBytes); err != nil {
+		if _, err := fromTOMLLine(benchTOMLBytes); err != nil {
 			b.Fatal(err)
 		}
 	}

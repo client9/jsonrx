@@ -212,43 +212,43 @@ func TestTOMLTableReentry(t *testing.T) {
 
 // TestTOMLLineOrderedTablesStayOnFastPath verifies ordered siblings don't trigger errReentry.
 func TestTOMLLineOrderedTablesStayOnFastPath(t *testing.T) {
-	got, err := tomlConvertLine([]byte("[fruit.apple]\nx = 1\n[fruit.orange]\ny = 2\n[animal]\nz = 3"))
+	got, err := fromTOMLLine([]byte("[fruit.apple]\nx = 1\n[fruit.orange]\ny = 2\n[animal]\nz = 3"))
 	if err != nil {
-		t.Fatalf("tomlConvertLine error: %v", err)
+		t.Fatalf("fromTOMLLine error: %v", err)
 	}
 	want := `{"fruit":{"apple":{"x":1},"orange":{"y":2}},"animal":{"z":3}}`
 	if string(got) != want {
-		t.Fatalf("tomlConvertLine = %s, want %s", got, want)
+		t.Fatalf("fromTOMLLine = %s, want %s", got, want)
 	}
 }
 
 // TestTOMLLineOutOfOrderTableReentry verifies the errReentry sentinel is returned.
 func TestTOMLLineOutOfOrderTableReentry(t *testing.T) {
-	_, err := tomlConvertLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[fruit.orange]\ny = 2"))
+	_, err := fromTOMLLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[fruit.orange]\ny = 2"))
 	if err != errReentry {
-		t.Fatalf("tomlConvertLine error = %v, want errReentry", err)
+		t.Fatalf("fromTOMLLine error = %v, want errReentry", err)
 	}
 }
 
 func TestTOMLLineQuotedDotTableDoesNotCollideWithDottedPath(t *testing.T) {
-	got, err := tomlConvertLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[\"fruit.apple\"]\ny = 2"))
+	got, err := fromTOMLLine([]byte("[fruit.apple]\nx = 1\n[animal]\nz = 3\n[\"fruit.apple\"]\ny = 2"))
 	if err != nil {
-		t.Fatalf("tomlConvertLine error: %v", err)
+		t.Fatalf("fromTOMLLine error: %v", err)
 	}
 	want := `{"fruit":{"apple":{"x":1}},"animal":{"z":3},"fruit.apple":{"y":2}}`
 	if string(got) != want {
-		t.Fatalf("tomlConvertLine = %s, want %s", got, want)
+		t.Fatalf("fromTOMLLine = %s, want %s", got, want)
 	}
 }
 
 func TestTOMLLineQuotedDotAoTDoesNotCollideWithDottedPath(t *testing.T) {
-	got, err := tomlConvertLine([]byte("[[fruit.apple]]\nx = 1\n[[\"fruit.apple\"]]\ny = 2"))
+	got, err := fromTOMLLine([]byte("[[fruit.apple]]\nx = 1\n[[\"fruit.apple\"]]\ny = 2"))
 	if err != nil {
-		t.Fatalf("tomlConvertLine error: %v", err)
+		t.Fatalf("fromTOMLLine error: %v", err)
 	}
 	want := `{"fruit":{"apple":[{"x":1}]},"fruit.apple":[{"y":2}]}`
 	if string(got) != want {
-		t.Fatalf("tomlConvertLine = %s, want %s", got, want)
+		t.Fatalf("fromTOMLLine = %s, want %s", got, want)
 	}
 }
 
