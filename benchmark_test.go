@@ -101,7 +101,6 @@ func BenchmarkFromTOMLTreeOnly(b *testing.B) {
 	}
 }
 
-
 // Small-input benchmarks compare streaming vs line-by-line vs tree on frontmatter1TOML.
 
 func BenchmarkFromTOMLStreamSmall(b *testing.B) {
