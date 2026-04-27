@@ -83,6 +83,15 @@ func BenchmarkFromTOMLStreamOnly(b *testing.B) {
 	}
 }
 
+func BenchmarkFromTOMLLineOnly(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := fromTOMLLine(frontmatter1TOMLBytes); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkFromTOMLTreeOnly(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
@@ -92,14 +101,6 @@ func BenchmarkFromTOMLTreeOnly(b *testing.B) {
 	}
 }
 
-func BenchmarkFromTOMLLineOnly(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		if _, err := fromTOMLLine(frontmatter1TOMLBytes); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
 
 // Small-input benchmarks compare streaming vs line-by-line vs tree on frontmatter1TOML.
 
