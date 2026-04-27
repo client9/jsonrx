@@ -6,6 +6,13 @@ line one
 line two
 """
 
+# comments '#' don't work inside a string
+withcomment = """
+line one
+# nothing
+line two
+"""
+
 trimmed1 = """hello \
    world"""
 
