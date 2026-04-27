@@ -50,6 +50,21 @@ const tomlMaxNesting = 4
 
 // tomlLineParser holds the mutable state shared across methods during a single
 // tomlConvertLine call.
+//
+// The parser maintains two parallel stacks. stackBuf/stackLen tracks the
+// section nesting introduced by [table] and [[array]] headers; entries are
+// streamFrame values keyed by header segment. inlineKeys/inlineComma/inlineUsed
+// track dotted-key prefixes opened on the current line (e.g. a.b.c = 1 opens
+// the temporary inline objects for a and a.b) and are collapsed back to depth
+// zero before any new header or bare key/value pair is processed.
+//
+// state, accum, and startLine drive the multi-line value sub-state machine:
+// when a value begins with """, ”', or an unterminated [, subsequent input
+// lines are appended to accum until the matching terminator is found, at
+// which point the accumulated bytes are parsed and emitted as a single JSON
+// value. arrayDepth/arrayDouble/arraySingle are the bookkeeping fields used
+// by scanArrayLine to track bracket nesting and quoted regions while in the
+// tomlStateInlineArray state.
 type tomlLineParser struct {
 	buf         bytes.Buffer
 	stackBuf    [tomlMaxNesting + 1]streamFrame // fixed backing; index 0 is the root frame
@@ -66,6 +81,9 @@ type tomlLineParser struct {
 	arraySingle bool
 }
 
+// topNC reports whether the innermost open container — an inline dotted-key
+// object if one is open, otherwise the topmost section frame — already holds
+// at least one entry and therefore needs a leading comma before the next.
 func (p *tomlLineParser) topNC() bool {
 	if len(p.inlineKeys) > 0 {
 		return p.inlineComma[len(p.inlineComma)-1]
@@ -73,6 +91,7 @@ func (p *tomlLineParser) topNC() bool {
 	return p.stackBuf[p.stackLen-1].needComma
 }
 
+// setTopNC sets the needs-comma flag on whichever container topNC inspects.
 func (p *tomlLineParser) setTopNC(v bool) {
 	if len(p.inlineKeys) > 0 {
 		p.inlineComma[len(p.inlineComma)-1] = v
@@ -81,6 +100,10 @@ func (p *tomlLineParser) setTopNC(v bool) {
 	}
 }
 
+// markKey records key as used in the innermost open container and returns an
+// error if the same key has already been seen there. The lookup is a linear
+// bytes.Equal scan; TOML tables are typically small enough that this beats
+// hashing.
 func (p *tomlLineParser) markKey(key []byte) error {
 	var keys *[][]byte
 	if len(p.inlineKeys) > 0 {
@@ -97,6 +120,9 @@ func (p *tomlLineParser) markKey(key []byte) error {
 	return nil
 }
 
+// closeInlineTo pops inline dotted-key frames until exactly depth remain,
+// emitting a closing '}' for each one. Passing 0 collapses the inline stack
+// entirely — required before any new header or top-level key/value pair.
 func (p *tomlLineParser) closeInlineTo(depth int) {
 	for len(p.inlineKeys) > depth {
 		p.buf.WriteByte('}')
@@ -106,6 +132,9 @@ func (p *tomlLineParser) closeInlineTo(depth int) {
 	}
 }
 
+// closeSectionsTo pops section frames until stackLen equals depth, emitting
+// '}' (or '}]' for an array-of-tables frame) for each one and recording the
+// closed paths in p.closed so future re-entry can be detected.
 func (p *tomlLineParser) closeSectionsTo(depth int) {
 	for p.stackLen > depth {
 		top := p.stackBuf[p.stackLen-1]
@@ -119,6 +148,10 @@ func (p *tomlLineParser) closeSectionsTo(depth int) {
 	}
 }
 
+// currentSectionIs reports whether the open section stack (excluding the root
+// frame at index 0) names exactly path. Used to detect a sibling [[a.b]]
+// header that should append a new element to an existing array of tables
+// rather than open a fresh nested chain.
 func (p *tomlLineParser) currentSectionIs(path [][]byte) bool {
 	if len(path) != p.stackLen-1 {
 		return false
@@ -131,6 +164,15 @@ func (p *tomlLineParser) currentSectionIs(path [][]byte) bool {
 	return true
 }
 
+// openSection brings the section stack into the state required by a
+// [path] or [[path]] header. It computes the longest common prefix with the
+// currently open stack, closes the divergent suffix, then opens any newly
+// named segments — emitting the appropriate JSON punctuation as it goes.
+//
+// For [[...]] headers whose path matches the current AoT frame exactly,
+// openSection emits "},{" to start a new array element instead of opening
+// a fresh chain. Returns errReentry if path would re-open a table that has
+// already been closed by a prior header.
 func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 	var fullDotPath string
 	if len(path) == 1 {
@@ -246,17 +288,28 @@ func (p *tomlLineParser) scanArrayLine(b []byte) bool {
 	return false
 }
 
+// appendAccumLine appends a newline followed by line to the multi-line
+// accumulator. The leading '\n' restores the line break that was consumed
+// when the outer loop split on newlines, so the buffered content matches the
+// original source byte-for-byte.
 func (p *tomlLineParser) appendAccumLine(line []byte) {
 	p.accum = append(p.accum, '\n')
 	p.accum = append(p.accum, line...)
 }
 
+// finishAccumValue marks the just-emitted value as present, clears the
+// accumulator, and returns the parser to tomlStateNormal.
 func (p *tomlLineParser) finishAccumValue() {
 	p.setTopNC(true)
 	p.accum = p.accum[:0]
 	p.state = tomlStateNormal
 }
 
+// handleAccumLine feeds line into whichever multi-line accumulator is active.
+// The first return reports whether the line was consumed by accumulation
+// (true) or should be processed as ordinary input (false). When the
+// terminator for the current state is found, the accumulated value is parsed
+// and emitted before returning true.
 func (p *tomlLineParser) handleAccumLine(line []byte) (bool, error) {
 	// String content is raw here; stripping comments or whitespace would corrupt
 	// multiline values.
@@ -302,6 +355,11 @@ func (p *tomlLineParser) handleAccumLine(line []byte) (bool, error) {
 	}
 }
 
+// handleHeader parses a [table] or [[array.of.tables]] header and updates
+// the section stack accordingly. trimmed is the line with surrounding
+// whitespace removed; lineNum and leading are used to attach source
+// positions to any error returned. pathBuf is a caller-owned scratch buffer
+// reused across calls to avoid per-line allocations.
 func (p *tomlLineParser) handleHeader(trimmed []byte, lineNum, leading int, pathBuf *[4][]byte, isAoT bool) error {
 	p.closeInlineTo(0)
 
@@ -337,6 +395,9 @@ func (p *tomlLineParser) handleHeader(trimmed []byte, lineNum, leading int, path
 	return nil
 }
 
+// tomlBareKeyValue attempts to split trimmed into a single bare key and the
+// value text following the '=' sign. It returns ok == false when the input
+// uses a quoted or dotted key, leaving that case to handleDottedKeyValue.
 func tomlBareKeyValue(trimmed []byte) (key, rest []byte, ok bool) {
 	bareEnd := 0
 	for bareEnd < len(trimmed) {
@@ -358,6 +419,10 @@ func tomlBareKeyValue(trimmed []byte) (key, rest []byte, ok bool) {
 	return trimmed[:bareEnd], bytes.TrimLeft(trimmed[eqPos+1:], " \t"), true
 }
 
+// handleDottedKeyValue handles any key/value line not consumed by the bare
+// key fast path: dotted keys such as a.b.c = 1 and quoted keys. It opens
+// inline objects for every prefix segment, marks the leaf key as used in its
+// parent, then writes the value.
 func (p *tomlLineParser) handleDottedKeyValue(trimmed []byte, lineNum, leading int, pathBuf *[4][]byte) error {
 	path, rest, err := parseTOMLKeyPath(trimmed, pathBuf[:0])
 	if err != nil {
@@ -386,6 +451,10 @@ func (p *tomlLineParser) handleDottedKeyValue(trimmed []byte, lineNum, leading i
 	return p.writeValue(rest, lineNum, valCol)
 }
 
+// openInlinePrefix ensures the inline-object stack matches prefix exactly,
+// closing any divergent suffix and opening any missing segments. Each newly
+// opened segment is marked as a used key in its parent so a later attempt to
+// redefine it as a scalar (or vice versa) is rejected.
 func (p *tomlLineParser) openInlinePrefix(prefix [][]byte, lineNum, leading int) error {
 	if len(prefix) == 0 {
 		p.closeInlineTo(0)
@@ -418,6 +487,11 @@ func (p *tomlLineParser) openInlinePrefix(prefix [][]byte, lineNum, leading int)
 	return nil
 }
 
+// startMultilineValue switches the parser into one of the multi-line
+// accumulation states, seeding the accumulator with rest (the value text
+// from the originating line) and recording lineNum as the value's start
+// line for error messages. For inline arrays it also primes the bracket and
+// quote tracking by scanning the seed bytes.
 func (p *tomlLineParser) startMultilineValue(rest []byte, lineNum, mlState int) {
 	p.accum = append(p.accum[:0], rest...)
 	p.state = mlState
@@ -428,6 +502,10 @@ func (p *tomlLineParser) startMultilineValue(rest []byte, lineNum, mlState int) 
 	}
 }
 
+// writeValue emits the JSON encoding of a TOML value. If rest opens a
+// multi-line construct the parser transitions into the matching accumulation
+// state instead and emits nothing until the terminator arrives. valCol is
+// the 1-based column of the first byte of rest, used for error positions.
 func (p *tomlLineParser) writeValue(rest []byte, lineNum, valCol int) error {
 	if ml, mlState := multilineStart(rest); ml {
 		p.startMultilineValue(rest, lineNum, mlState)
@@ -440,6 +518,11 @@ func (p *tomlLineParser) writeValue(rest []byte, lineNum, valCol int) error {
 	return nil
 }
 
+// fromTOMLLine is the entry point for the line-based TOML→JSON converter.
+// It walks input one line at a time, dispatching to the header, key/value,
+// and accumulation handlers, and returns the emitted JSON document. A
+// returned errReentry indicates the caller should fall back to a stricter
+// parser that handles out-of-order table re-entry.
 func fromTOMLLine(input []byte) ([]byte, error) {
 	p := &tomlLineParser{stackLen: 1} // stackBuf[0] is the root frame, zero-initialised
 	p.buf.Grow(len(input))
