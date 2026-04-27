@@ -66,64 +66,6 @@ type tomlLineParser struct {
 	arraySingle bool
 }
 
-type tomlLineClosedTables struct {
-	root tomlLineClosedNode
-}
-
-type tomlLineClosedNode struct {
-	key      []byte
-	closed   bool
-	children []tomlLineClosedNode
-}
-
-func (n *tomlLineClosedNode) find(key []byte) *tomlLineClosedNode {
-	for i := range n.children {
-		if bytes.Equal(n.children[i].key, key) {
-			return &n.children[i]
-		}
-	}
-	return nil
-}
-
-func (n *tomlLineClosedNode) child(key []byte) *tomlLineClosedNode {
-	if child := n.find(key); child != nil {
-		return child
-	}
-	n.children = append(n.children, tomlLineClosedNode{key: key})
-	return &n.children[len(n.children)-1]
-}
-
-func (c *tomlLineClosedTables) mark(stack []streamFrame) {
-	if len(stack) <= 1 {
-		return
-	}
-	node := &c.root
-	for i := 1; i < len(stack); i++ {
-		node = node.child(stack[i].key)
-	}
-	node.closed = true
-}
-
-func (c *tomlLineClosedTables) contains(path [][]byte) bool {
-	node := &c.root
-	for _, key := range path {
-		node = node.find(key)
-		if node == nil {
-			return false
-		}
-	}
-	return node.closed
-}
-
-func (c *tomlLineClosedTables) reopens(path [][]byte, commonDepth int) bool {
-	for i := commonDepth; i < len(path); i++ {
-		if c.contains(path[:i+1]) {
-			return true
-		}
-	}
-	return false
-}
-
 func (p *tomlLineParser) topNC() bool {
 	if len(p.inlineKeys) > 0 {
 		return p.inlineComma[len(p.inlineComma)-1]
