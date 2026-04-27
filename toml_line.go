@@ -250,6 +250,8 @@ func (p *tomlLineParser) openSection(path [][]byte, isAoT bool) error {
 
 // scanArrayLine advances the inline-array parse state by scanning b,
 // returning true when the top-level ']' is reached (arrayDepth → 0).
+// A '#' outside any quoted region starts a comment that runs to the end
+// of b, so brackets and quotes inside the comment are ignored.
 func (p *tomlLineParser) scanArrayLine(b []byte) bool {
 	for i := 0; i < len(b); i++ {
 		c := b[i]
@@ -264,6 +266,8 @@ func (p *tomlLineParser) scanArrayLine(b []byte) bool {
 			if c == '\'' {
 				p.arraySingle = false
 			}
+		case c == '#':
+			return false
 		case c == '"':
 			p.arrayDouble = true
 		case c == '\'':

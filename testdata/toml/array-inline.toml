@@ -31,3 +31,20 @@ multiline5 = [10
 ]
 multiline6 = [10 , 20 , 30
    ,]
+
+multiline7 = [
+
+   10 , 20 , 30
+
+   ]
+
+multiline8 = [ # comment 1
+# comment 2
+   10 # comment 2
+   ,  # comment 3
+   20 # comment 4
+   ,  # comment 5
+   30 # comment 6
+   ,  # comment 7
+# comment 8
+] # comment 9

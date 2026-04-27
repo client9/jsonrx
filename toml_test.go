@@ -93,6 +93,8 @@ func TestTOMLMultilineBasic(t *testing.T) {
 		checkTOML(t, fn, "key = \"\"\"\nline one\nline two\n\"\"\"", `{"key":"line one\nline two\n"}`)
 		// line-ending backslash trims whitespace
 		checkTOML(t, fn, "key = \"\"\"hello \\\n   world\"\"\"", `{"key":"hello world"}`)
+		// CRLF line endings inside the multi-line value
+		checkTOML(t, fn, "key = \"\"\"\r\nline one\r\nline two\r\n\"\"\"", `{"key":"line one\nline two\n"}`)
 	})
 }
 
@@ -354,6 +356,22 @@ func TestTOMLInlineArray(t *testing.T) {
 func TestTOMLInlineArrayMultiline(t *testing.T) {
 	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
 		checkTOML(t, fn, "nums = [\n  1,\n  2,\n  3,\n]", `{"nums":[1,2,3]}`)
+		// CRLF line endings inside the array
+		checkTOML(t, fn, "nums = [\r\n  1,\r\n  2,\r\n]", `{"nums":[1,2]}`)
+	})
+}
+
+func TestTOMLUnterminatedMultiline(t *testing.T) {
+	forParsers(t, nil, func(t *testing.T, fn tomlFn) {
+		for _, input := range []string{
+			"key = \"\"\"\nline one\n",
+			"key = '''\nline one\n",
+			"nums = [\n  1,\n  2,\n",
+		} {
+			if _, err := fn([]byte(input)); err == nil {
+				t.Errorf("input %q: expected error, got nil", input)
+			}
+		}
 	})
 }
 

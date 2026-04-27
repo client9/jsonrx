@@ -768,6 +768,27 @@ func writeTOMLValue(s []byte, rawLines [][]byte, lineIdx int, buf *bytes.Buffer)
 	return 0, nil
 }
 
+// tomlFlowSkipWS advances pos past ASCII whitespace, newlines, and TOML
+// '#' line comments (which run to the end of the current line). Used inside
+// multi-line inline arrays, where comments are permitted between values,
+// element separators, and the closing bracket.
+func tomlFlowSkipWS(s []byte, pos int) int {
+	for pos < len(s) {
+		switch s[pos] {
+		case ' ', '\t', '\n', '\r':
+			pos++
+		case '#':
+			pos++
+			for pos < len(s) && s[pos] != '\n' {
+				pos++
+			}
+		default:
+			return pos
+		}
+	}
+	return pos
+}
+
 // writeTOMLInlineArray writes [v, v, ...] starting at s[0] directly to buf.
 func writeTOMLInlineArray(s []byte, rawLines [][]byte, lineIdx int, buf *bytes.Buffer) (int, error) {
 	// 3-index slice prevents appending into caller's buffer.
@@ -779,7 +800,7 @@ func writeTOMLInlineArray(s []byte, rawLines [][]byte, lineIdx int, buf *bytes.B
 
 	for {
 		for {
-			pos = flowSkipWS(s, pos)
+			pos = tomlFlowSkipWS(s, pos)
 			if pos < len(s) {
 				break
 			}
@@ -801,9 +822,9 @@ func writeTOMLInlineArray(s []byte, rawLines [][]byte, lineIdx int, buf *bytes.B
 			if s[pos] != ',' {
 				return extraLines, fmt.Errorf("expected ',' or ']' in array")
 			}
-			pos = flowSkipWS(s, pos+1)
+			pos = tomlFlowSkipWS(s, pos+1)
 			for {
-				pos = flowSkipWS(s, pos)
+				pos = tomlFlowSkipWS(s, pos)
 				if pos < len(s) {
 					break
 				}
@@ -852,7 +873,7 @@ func parseTOMLInlineArray(s []byte, rawLines [][]byte, lineIdx int, pos int) (*j
 
 	for {
 		for {
-			pos = flowSkipWS(s, pos)
+			pos = tomlFlowSkipWS(s, pos)
 			if pos < len(s) {
 				break
 			}
@@ -873,9 +894,9 @@ func parseTOMLInlineArray(s []byte, rawLines [][]byte, lineIdx int, pos int) (*j
 			if s[pos] != ',' {
 				return nil, pos, extraLines, fmt.Errorf("expected ',' or ']' in array")
 			}
-			pos = flowSkipWS(s, pos+1)
+			pos = tomlFlowSkipWS(s, pos+1)
 			for {
-				pos = flowSkipWS(s, pos)
+				pos = tomlFlowSkipWS(s, pos)
 				if pos < len(s) {
 					break
 				}
