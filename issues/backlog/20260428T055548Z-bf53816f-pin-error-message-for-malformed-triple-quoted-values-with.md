@@ -1,0 +1,28 @@
+{
+  "title": "Pin error message for malformed triple-quoted values with trailing junk",
+  "id": "20260428T055548Z-bf53816f",
+  "state": "backlog",
+  "created": "2026-04-28T05:55:48Z",
+  "labels": [
+    "bug"
+  ],
+  "assignees": [],
+  "milestone": "",
+  "projects": [],
+  "template": "",
+  "events": [
+    {
+      "ts": "2026-04-28T05:55:48Z",
+      "type": "filed",
+      "to": "backlog"
+    }
+  ]
+}
+
+## Symptom
+
+Inputs like `s = '''abc'''xyz` are malformed TOML. `multilineStart` returns single-line (because `s[3:]` contains `'''`), then the single-line value parser sees the whole string and produces some error — but no test currently pins which error or where it surfaces.
+
+## Suspected fix
+
+Add a test that exercises the form and asserts a specific, useful error message at a known line/col. If the current message is poor, improve it in `parseTOMLLiteralStringRaw` / `parseTOMLBasicStringRaw`.
