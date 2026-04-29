@@ -17,14 +17,14 @@
   ]
 }
 
-Another front matter marker is 
+Another front matter marker is reusing the existing markdown code block with qualifier:
 
 ```
-\`\`\`json
+\`\`\`json  (or yaml or toml)
 {
 ...
 }
-\`\`'`
+\`\`\`
 
 ```
 
