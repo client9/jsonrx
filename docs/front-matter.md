@@ -80,7 +80,7 @@ const var fruit = "apple";
 ---
 ```
 
-### Triple SemiColor for JSON
+### Triple SemiColon for JSON
 
 As seen in [adrg/frontmatter](https://github.com/adrg/frontmatter) (Go):
 
