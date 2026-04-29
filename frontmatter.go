@@ -21,6 +21,9 @@ var frontMatterFormats = []fmDef{
 	{"---json", "---", "json"},
 	{"---", "---", "yaml"},
 	{"+++", "+++", "toml"},
+	{"```yaml", "```", "yaml"},
+	{"```toml", "```", "toml"},
+	{"```json", "```", "json"},
 	{"{", "}", "json"},
 }
 
@@ -127,6 +130,17 @@ func detectFrontMatterFormat(in []byte) (def fmDef, rest []byte, found bool, err
 	// A line that starts with "---" followed by non-dash characters is an
 	// attempted qualifier. Treat it as an error rather than no front matter.
 	if len(trimmed) > 3 && trimmed[:3] == "---" && trimmed[3] != '-' {
+		return fmDef{}, nil, false, &ParseError{
+			Line:    1,
+			Column:  1,
+			Message: fmt.Sprintf("unknown front matter qualifier %q", trimmed[3:]),
+		}
+	}
+
+	// A line that starts with "```" followed by non-backtick characters is an
+	// attempted backtick qualifier. Only json/yaml/toml are supported;
+	// unqualified "```" is not supported (too common in Markdown).
+	if len(trimmed) > 3 && trimmed[:3] == "```" && trimmed[3] != '`' {
 		return fmDef{}, nil, false, &ParseError{
 			Line:    1,
 			Column:  1,

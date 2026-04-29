@@ -226,6 +226,82 @@ func TestFromFrontMatter(t *testing.T) {
 			wantBody: "----\ntitle: Hello\n---\nbody\n",
 		},
 
+		// backtick code-fence qualifiers ---
+		{
+			name:     "backtick yaml basic",
+			input:    "```yaml\ntitle: Hello\nauthor: alice\n```\nbody text\n",
+			wantMeta: `{"title":"Hello","author":"alice"}`,
+			wantBody: "body text\n",
+		},
+		{
+			name:     "backtick toml basic",
+			input:    "```toml\ntitle = \"Hello\"\nauthor = \"alice\"\n```\nbody text\n",
+			wantMeta: `{"title":"Hello","author":"alice"}`,
+			wantBody: "body text\n",
+		},
+		{
+			name:     "backtick json basic",
+			input:    "```json\n{\"title\":\"Hello\"}\n```\nbody text\n",
+			wantMeta: `{"title":"Hello"}`,
+			wantBody: "body text\n",
+		},
+		{
+			name:     "backtick json with JSON5 extensions",
+			input:    "```json\n{\n  // comment\n  title: 'Hello',\n}\n```\nbody\n",
+			wantMeta: `{"title":"Hello"}`,
+			wantBody: "body\n",
+		},
+		{
+			name:     "backtick yaml empty block",
+			input:    "```yaml\n```\nbody\n",
+			wantMeta: `{}`,
+			wantBody: "body\n",
+		},
+		{
+			name:     "backtick yaml closing sentinel at EOF without newline",
+			input:    "```yaml\ntitle: Hello\n```",
+			wantMeta: `{"title":"Hello"}`,
+			wantBody: "",
+		},
+		{
+			name:     "trailing spaces on backtick opening sentinel",
+			input:    "```yaml   \ntitle: Hello\n```\nbody\n",
+			wantMeta: `{"title":"Hello"}`,
+			wantBody: "body\n",
+		},
+		{
+			name:     "trailing spaces on backtick closing sentinel",
+			input:    "```yaml\ntitle: Hello\n```   \nbody\n",
+			wantMeta: `{"title":"Hello"}`,
+			wantBody: "body\n",
+		},
+		{
+			name:    "backtick yaml unclosed is an error",
+			input:   "```yaml\ntitle: Hello\n",
+			wantErr: true,
+		},
+		{
+			name:    "backtick yaml parse error",
+			input:   "```yaml\nkey: [unclosed\n```\nbody\n",
+			wantErr: true,
+		},
+		{
+			name:     "unqualified backtick is not front matter",
+			input:    "```\ntitle: Hello\n```\nbody\n",
+			wantErr:  false,
+			wantBody: "```\ntitle: Hello\n```\nbody\n",
+		},
+		{
+			name:    "bogus backtick qualifier ```js",
+			input:   "```js\ntitle: Hello\n```\nbody\n",
+			wantErr: true,
+		},
+		{
+			name:    "bogus backtick qualifier ```YAML (wrong case)",
+			input:   "```YAML\ntitle: Hello\n```\nbody\n",
+			wantErr: true,
+		},
+
 		// missing closing sentinel ---
 		{
 			name:    "toml unclosed is an error",

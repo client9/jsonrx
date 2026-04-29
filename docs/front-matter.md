@@ -70,6 +70,36 @@ NOTE: this works since YAML is a superset of JSON.  It will be parsed with a YAM
 ---
 ```
 
+## Markdown Code Fence Formats
+
+Using a triple-backtick code fence with an explicit language qualifier renders
+as a syntax-highlighted block in Markdown and is recognised as front matter.
+The qualifier is **required** — a bare ` ``` ` without a format is ignored.
+
+### Code Fence YAML
+
+```
+```yaml
+fruit: "apple"
+```
+```
+
+### Code Fence TOML
+
+```
+```toml
+fruit = "apple"
+```
+```
+
+### Code Fence JSON
+
+```
+```json
+{"fruit": "apple"}
+```
+```
+
 ## Not Supported
 
 ### Triple Dash Javascript Qualifier
