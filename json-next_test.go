@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -44,11 +45,9 @@ func TestJsonNext(t *testing.T) {
 	}
 
 	err := filepath.WalkDir("samples/json-next-tests", (func(path string, dir fs.DirEntry, err error) error {
-		for _, s := range suf {
-			if filepath.Ext(path) == s {
-				files = append(files, path)
-				return nil
-			}
+		if slices.Contains(suf, filepath.Ext(path)) {
+			files = append(files, path)
+			return nil
 		}
 		return nil
 	}))
@@ -58,23 +57,21 @@ func TestJsonNext(t *testing.T) {
 
 	for _, f := range files {
 		t.Run(f, func(t *testing.T) {
-			for _, white := range whitelist {
-				if white == filepath.Base(f) {
-					t.Skip()
-					return
-				}
+			if slices.Contains(whitelist, filepath.Base(f)) {
+				t.Skip()
+				return
 			}
 			src, err := os.ReadFile(f)
 			if err != nil {
 				t.Fatalf("%s: unable to read: %v", src, err)
 			}
-			idx := bytes.Index(src, []byte("---"))
-			if idx == -1 {
+			before, after, ok := bytes.Cut(src, []byte("---"))
+			if !ok {
 				t.Fatalf("Couldn't find marker")
 			}
 
-			orig := src[:idx]
-			want := src[idx+3:]
+			orig := before
+			want := after
 
 			data, err := FromJSONVariant(orig)
 			if err != nil {

@@ -414,7 +414,7 @@ func stripUnderscoresBytesValidated(s []byte) ([]byte, error) {
 		return s, nil
 	}
 	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		c := s[i]
 		if c == '_' {
 			if i == 0 || i == len(s)-1 {

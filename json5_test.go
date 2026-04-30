@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -43,11 +44,9 @@ func TestJson5Json(t *testing.T) {
 	}
 
 	err := filepath.WalkDir("samples/json5-tests", (func(path string, dir fs.DirEntry, err error) error {
-		for _, s := range suf {
-			if filepath.Ext(path) == s {
-				files = append(files, path)
-				return nil
-			}
+		if slices.Contains(suf, filepath.Ext(path)) {
+			files = append(files, path)
+			return nil
 		}
 		return nil
 	}))
@@ -57,11 +56,9 @@ func TestJson5Json(t *testing.T) {
 
 	for _, f := range files {
 		t.Run(f, func(t *testing.T) {
-			for _, white := range whitelist {
-				if white == filepath.Base(f) {
-					t.Skip()
-					return
-				}
+			if slices.Contains(whitelist, filepath.Base(f)) {
+				t.Skip()
+				return
 			}
 			src, err := os.ReadFile(f)
 			if err != nil {

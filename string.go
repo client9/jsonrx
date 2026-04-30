@@ -164,10 +164,7 @@ func appendString(dst []byte, src []byte) []byte {
 			start = i
 			continue
 		}
-		n := len(src) - i
-		if n > utf8.UTFMax {
-			n = utf8.UTFMax
-		}
+		n := min(len(src)-i, utf8.UTFMax)
 		c, size := utf8.DecodeRune(src[i : i+n])
 		if c == utf8.RuneError && size == 1 {
 			dst = append(dst, src[start:i]...)
