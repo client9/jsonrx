@@ -55,6 +55,11 @@ var frontMatterFormats = []fmDef{
 // sentinel line. If no recognised front matter opening is detected, meta is
 // nil, body is the full input, and err is nil. Parse failures inside the
 // front matter block are returned as *ParseError.
+//
+// body is always an unmodified subslice of the input — no copying or
+// reallocation occurs. The byte offset of body within src can be recovered
+// with len(src)-len(body) when an exact position is needed (e.g. to adjust
+// line numbers or byte offsets in downstream error messages).
 func FromFrontMatter(in []byte) (meta []byte, body []byte, err error) {
 	def, rest, found, err := detectFrontMatterFormat(in)
 	if err != nil {
