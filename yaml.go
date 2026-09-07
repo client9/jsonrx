@@ -146,8 +146,8 @@ func (p *parser) parseBlock(parentIndent int, buf *bytes.Buffer) error {
 	default:
 		p.consume()
 		rawLine := p.rawIdx[p.pos-1]
-		if style, chomping, ok := detectBlockScalar(l.content); ok {
-			scalar, last, err := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+		if style, chomping, ind, ok := detectBlockScalar(l.content); ok {
+			scalar, last, err := p.collectBlockScalar(style, chomping, ind, rawLine, parentIndent)
 			if err != nil {
 				return err
 			}
@@ -197,8 +197,8 @@ func (p *parser) parseMapping(indent int, buf *bytes.Buffer) error {
 			if err := p.parseBlock(indent, buf); err != nil {
 				return err
 			}
-		} else if style, chomping, ok := detectBlockScalar(rest); ok {
-			scalar, last, err := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+		} else if style, chomping, ind, ok := detectBlockScalar(rest); ok {
+			scalar, last, err := p.collectBlockScalar(style, chomping, ind, rawLine, l.indent)
 			if err != nil {
 				return err
 			}
@@ -246,8 +246,8 @@ func (p *parser) parseSequence(indent int, buf *bytes.Buffer) error {
 			if err := p.parseBlock(indent, buf); err != nil {
 				return err
 			}
-		} else if style, chomping, ok := detectBlockScalar(rest); ok {
-			scalar, last, err := p.collectBlockScalar(style, chomping, rawLine, l.indent)
+		} else if style, chomping, ind, ok := detectBlockScalar(rest); ok {
+			scalar, last, err := p.collectBlockScalar(style, chomping, ind, rawLine, l.indent)
 			if err != nil {
 				return err
 			}
@@ -295,8 +295,8 @@ func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine i
 			if err := p.parseBlock(virtIndent-1, buf); err != nil {
 				return err
 			}
-		} else if style, chomping, ok := detectBlockScalar(rest); ok {
-			scalar, last, err := p.collectBlockScalar(style, chomping, rawLine, lineCol)
+		} else if style, chomping, ind, ok := detectBlockScalar(rest); ok {
+			scalar, last, err := p.collectBlockScalar(style, chomping, ind, rawLine, lineCol)
 			if err != nil {
 				return err
 			}
@@ -342,89 +342,180 @@ func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine i
 // --------------------------------------------------------------------------
 
 // detectBlockScalar returns the style ('|' or '>'), chomping ('-' strip,
-// '+' keep, 0 clip/default), and ok=true if s is a block scalar indicator.
-func detectBlockScalar(s []byte) (style, chomping byte, ok bool) {
+// '+' keep, 0 clip/default), the explicit indentation indicator (0 if absent,
+// meaning auto-detect), and ok=true if s is a block scalar indicator.
+//
+// The two indicators may appear in either order ("|2-" and "|-2"), but each
+// at most once.
+func detectBlockScalar(s []byte) (style, chomping byte, indent int, ok bool) {
 	s = bytes.TrimSpace(s)
 	if len(s) == 0 || (s[0] != '|' && s[0] != '>') {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 	style = s[0]
 	for _, c := range s[1:] {
-		switch c {
-		case '-':
-			chomping = '-'
-		case '+':
-			chomping = '+'
-		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			// explicit indentation indicator — ignored, auto-detect instead
+		switch {
+		case c == '-' || c == '+':
+			if chomping != 0 {
+				return 0, 0, 0, false
+			}
+			chomping = c
+		case c >= '1' && c <= '9':
+			if indent != 0 {
+				return 0, 0, 0, false
+			}
+			indent = int(c - '0')
 		default:
-			return 0, 0, false
+			return 0, 0, 0, false
 		}
 	}
-	return style, chomping, true
+	return style, chomping, indent, true
 }
 
-// collectBlockScalar reads raw lines following rawLineIdx to build a literal
-// (style='|') or folded (style='>') scalar.
-func (p *parser) collectBlockScalar(style, chomping byte, rawLineIdx, keyIndent int) ([]byte, int, error) {
+// blockLine is one collected line of a block scalar. text is the line with the
+// block indentation prefix removed; blank marks an empty line; more marks a
+// line indented deeper than the block indentation, which folding leaves alone.
+type blockLine struct {
+	text  []byte
+	blank bool
+	more  bool
+}
+
+// collectBlockScalar reads the raw lines following rawLineIdx to build a
+// literal (style='|') or folded (style='>') scalar, per YAML 1.2 section 8.1.
+//
+// indentIndicator is the explicit indentation indicator from the header, or 0
+// to auto-detect from the first non-empty line. It counts from parentIndent,
+// the indentation of the block scalar's parent node.
+func (p *parser) collectBlockScalar(style, chomping byte, indentIndicator, rawLineIdx, parentIndent int) ([]byte, int, error) {
 	blockIndent := -1
-	var contentLines [][]byte
+	if indentIndicator > 0 {
+		blockIndent = parentIndent + indentIndicator
+	}
+	var lines []blockLine
+	leadingBlanks := 0
 	lastIdx := rawLineIdx
 
 	for i := rawLineIdx + 1; i < len(p.rawLines); i++ {
-		raw := bytes.TrimRight(p.rawLines[i], " \t\r")
-		if len(bytes.TrimSpace(raw)) == 0 {
-			if blockIndent >= 0 {
-				contentLines = append(contentLines, nil)
-				lastIdx = i
-			}
+		raw := bytes.TrimRight(p.rawLines[i], "\r")
+		blank := len(bytes.TrimSpace(raw)) == 0
+
+		// Empty lines ahead of the first content line cannot be placed until
+		// that line fixes the block indentation, so hold them.
+		if blank && blockIndent < 0 {
+			leadingBlanks++
+			lastIdx = i
 			continue
 		}
+
 		ind, err := yamlLeadingIndent(raw)
 		if err != nil {
 			return nil, -1, atLineCol(i, 0, err)
 		}
+
+		if blank {
+			// An all-whitespace line never ends the block: short ones are
+			// empty lines, and ones reaching past the block indentation carry
+			// that trailing whitespace as content.
+			if ind > blockIndent && len(raw) >= blockIndent {
+				lines = append(lines, blockLine{text: raw[blockIndent:], more: true})
+			} else {
+				lines = append(lines, blockLine{blank: true})
+			}
+			lastIdx = i
+			continue
+		}
+
 		if blockIndent < 0 {
-			if ind <= keyIndent {
+			if ind <= parentIndent {
 				break
 			}
 			blockIndent = ind
+			for ; leadingBlanks > 0; leadingBlanks-- {
+				lines = append(lines, blockLine{blank: true})
+			}
 		}
 		if ind < blockIndent {
 			break
 		}
-		contentLines = append(contentLines, raw[blockIndent:])
+		lines = append(lines, blockLine{text: raw[blockIndent:], more: ind > blockIndent})
 		lastIdx = i
 	}
 
-	var result []byte
-	if style == '|' {
-		result = bytes.Join(contentLines, []byte{'\n'})
-	} else {
-		var sb bytes.Buffer
-		for i, line := range contentLines {
-			if len(line) == 0 {
-				sb.WriteByte('\n')
-			} else {
-				if i > 0 && len(contentLines[i-1]) != 0 {
-					sb.WriteByte(' ')
-				}
-				sb.Write(line)
-			}
-		}
-		result = sb.Bytes()
+	// A block with no content line at all is just its empty lines.
+	for ; leadingBlanks > 0; leadingBlanks-- {
+		lines = append(lines, blockLine{blank: true})
 	}
 
+	// Trailing empty lines are governed by the chomping indicator, not by the
+	// folding rules, so split them off first.
+	end := len(lines)
+	for end > 0 && lines[end-1].blank {
+		end--
+	}
+	trailing := len(lines) - end
+	lines = lines[:end]
+
+	var out bytes.Buffer
+	if style == '|' {
+		for i, ln := range lines {
+			if i > 0 {
+				out.WriteByte('\n')
+			}
+			out.Write(ln.text)
+		}
+	} else {
+		// Folding (section 8.1.3): between two content lines that are both at
+		// the block indentation, a lone break becomes a space and a run of n
+		// empty lines becomes n newlines. A more-indented line on either side
+		// of a break suppresses that folding, keeping all n+1 breaks.
+		emitted := false
+		emptyRun := 0
+		prevMore := false
+		for _, ln := range lines {
+			if ln.blank {
+				emptyRun++
+				continue
+			}
+			switch {
+			case !emitted:
+				// Leading empty lines: one newline each, nothing to fold onto.
+				for ; emptyRun > 0; emptyRun-- {
+					out.WriteByte('\n')
+				}
+			case prevMore || ln.more:
+				// A more-indented line on either side keeps every break.
+				for n := emptyRun + 1; n > 0; n-- {
+					out.WriteByte('\n')
+				}
+				emptyRun = 0
+			case emptyRun == 0:
+				out.WriteByte(' ')
+			default:
+				// The break onto the empty run folds away, leaving one
+				// newline per empty line.
+				for ; emptyRun > 0; emptyRun-- {
+					out.WriteByte('\n')
+				}
+			}
+			out.Write(ln.text)
+			emitted = true
+			prevMore = ln.more
+		}
+	}
+	result := out.Bytes()
+
 	switch chomping {
-	case '-':
-		result = bytes.TrimRight(result, "\n")
-	case '+':
-		if len(contentLines) > 0 {
+	case '-': // strip: drop the final break and any trailing empty lines
+	case '+': // keep: retain the final break and every trailing empty line
+		if len(lines) > 0 {
 			result = append(result, '\n')
 		}
-	default:
-		result = bytes.TrimRight(result, "\n")
-		if len(contentLines) > 0 {
+		for i := 0; i < trailing; i++ {
+			result = append(result, '\n')
+		}
+	default: // clip: keep a single final break, drop trailing empty lines
+		if len(lines) > 0 {
 			result = append(result, '\n')
 		}
 	}

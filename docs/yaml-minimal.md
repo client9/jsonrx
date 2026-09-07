@@ -38,7 +38,24 @@ Large values pass through without evaluation — `1e309` stays `1e309`, not `Inf
 - *Unquoted*: any value not recognized as null, boolean, or number is a string.
 - *Single-quoted* (`'...'`): content is literal; `''` is the only escape (a literal single quote).
 - *Double-quoted* (`"..."`): Go string literal rules via `strconv.Unquote`. Supported escapes: `\n \t \r \\ \" \a \b \f \v \uNNNN \UNNNNNNNN \xNN`. YAML-specific escapes (`\/ \e \N \L \P`) and surrogate pairs (`𐀀`) are not supported and produce an error.
-- *Block scalars*: literal (`|`) preserves newlines; folded (`>`) folds newlines to spaces.
+- *Block scalars*: literal (`|`) preserves newlines; folded (`>`) folds newlines to spaces. See below.
+
+**Block scalars**
+
+Both styles support the full header — `|`, `>`, each with an optional chomping
+indicator (`-` strip, `+` keep, absent = clip) and an optional indentation
+indicator (`1`-`9`), in either order (`|2-` and `|-2` are equivalent).
+
+Content indentation is auto-detected from the first non-empty line unless an
+indentation indicator gives it explicitly, counting from the parent node's
+indentation. Leading empty lines are content. Trailing whitespace on a content
+line is preserved; an all-whitespace line is an empty line if it stops at the
+block indentation and content if it reaches past it. In folded scalars,
+more-indented lines are not folded — the breaks on either side of one are kept.
+
+Not enforced: several inputs the spec rejects are accepted rather than erroring
+— tab characters in indentation, an indentation indicator that overshoots the
+content, and a first content line more indented than the lines after it.
 
 ## Comments
 

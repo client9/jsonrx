@@ -428,6 +428,73 @@ key: >-
 `, `{"key":"foo bar"}`)
 }
 
+// Explicit indentation indicators (YAML 1.2 section 8.1.1.1). The indicator
+// counts from the parent node's indentation, and lets content keep leading
+// whitespace that auto-detection would swallow.
+func TestYAMLBlockScalarExplicitIndent(t *testing.T) {
+	roundtripYAML(t, "k: |2\n    a\n  b\n", `{"k":"  a\nb\n"}`)
+	roundtripYAML(t, "k: |1\n  a\n", `{"k":" a\n"}`)
+	roundtripYAML(t, "k: >2\n    a\n  b\n", `{"k":"  a\nb\n"}`)
+
+	// both orderings of the two indicators
+	roundtripYAML(t, "k: |-2\n    a\n", `{"k":"  a"}`)
+	roundtripYAML(t, "k: |2-\n    a\n", `{"k":"  a"}`)
+
+	// relative to the parent node, not the document
+	roundtripYAML(t, "a:\n  k: |2\n      x\n    y\n", `{"a":{"k":"  x\ny\n"}}`)
+	roundtripYAML(t, "a:\n  k: |1\n     x\n", `{"a":{"k":"  x\n"}}`)
+}
+
+// Leading empty lines are content, not padding to be skipped.
+func TestYAMLBlockScalarLeadingEmptyLines(t *testing.T) {
+	roundtripYAML(t, "k: |\n\n  a\n", `{"k":"\na\n"}`)
+	roundtripYAML(t, "k: |\n\n\n  a\n", `{"k":"\n\na\n"}`)
+	roundtripYAML(t, "k: >\n\n  a\n", `{"k":"\na\n"}`)
+	roundtripYAML(t, "k: |-\n\n  a\n\n", `{"k":"\na"}`)
+	roundtripYAML(t, "k: |+\n\n  a\n", `{"k":"\na\n"}`)
+
+	// a block of nothing but empty lines
+	roundtripYAML(t, "k: |\n\n\nj: 1\n", `{"k":"","j":1}`)
+	roundtripYAML(t, "k: |+\n\n\nj: 1\n", `{"k":"\n\n","j":1}`)
+}
+
+// Trailing whitespace on a content line is preserved.
+func TestYAMLBlockScalarTrailingWhitespace(t *testing.T) {
+	roundtripYAML(t, "k: |\n  a   \n  b\n", `{"k":"a   \nb\n"}`)
+	roundtripYAML(t, "k: |-\n  a\t\n", `{"k":"a\t"}`)
+	roundtripYAML(t, "k: >\n  a   \n  b\n", `{"k":"a    b\n"}`)
+
+	// an all-whitespace line is empty if it stops at the block indentation,
+	// and content if it reaches past it
+	roundtripYAML(t, "k: |\n  a\n \n  b\n", `{"k":"a\n\nb\n"}`)
+	roundtripYAML(t, "k: |\n  a\n  \n  b\n", `{"k":"a\n\nb\n"}`)
+	roundtripYAML(t, "k: |\n  a\n      \n  b\n", `{"k":"a\n    \nb\n"}`)
+}
+
+// Folded scalars leave more-indented lines alone (section 8.1.3): breaks on
+// either side of one are kept rather than folded to a space.
+func TestYAMLFoldedMoreIndentedLines(t *testing.T) {
+	roundtripYAML(t, "k: >\n  a\n   more\n  b\n", `{"k":"a\n more\nb\n"}`)
+	roundtripYAML(t, "k: >\n  a\n   m1\n   m2\n  b\n  c\n", `{"k":"a\n m1\n m2\nb c\n"}`)
+	roundtripYAML(t, "k: >-\n  a\n   b\n", `{"k":"a\n b"}`)
+
+	// an empty line next to a more-indented line keeps every break
+	roundtripYAML(t, "k: >\n  a\n\n   more\n\n  b\n", `{"k":"a\n\n more\n\nb\n"}`)
+
+	// ordinary folding is unaffected
+	roundtripYAML(t, "k: >\n  a\n\n  b\n", `{"k":"a\nb\n"}`)
+	roundtripYAML(t, "k: >\n  a\n\n\n  b\n", `{"k":"a\n\nb\n"}`)
+	roundtripYAML(t, "k: >\n   a\n   b\n\n   c\n", `{"k":"a b\nc\n"}`)
+}
+
+// A block scalar indicator on its own line measures its content against the
+// parent node's indentation, not the indicator line's own.
+func TestYAMLBlockScalarIndicatorOnOwnLine(t *testing.T) {
+	roundtripYAML(t, "k:\n  |-\n  a\n", `{"k":"a"}`)
+	roundtripYAML(t, "k:\n  |-\n    a\n", `{"k":"a"}`)
+	roundtripYAML(t, "k:\n  |\n  a\n  b\n", `{"k":"a\nb\n"}`)
+}
+
 func TestYAMLParseErrorString(t *testing.T) {
 	e := &ParseError{Line: 3, Column: 7, Message: "bad token"}
 	if got, want := e.Error(), "line 3, column 7: bad token"; got != want {
