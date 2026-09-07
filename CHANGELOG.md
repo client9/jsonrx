@@ -4,13 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unlreleased
+## [1.1.0] 2026-09-07 
 
 ### Fixed
 
-- Fixed various issues in multiline regarding leading and trailing white
+- YAML: Fixed various issues in multiline regarding leading and trailing white
   space and indentation.
-- Fixed parseInlineMap to correctly handle block-scalars and multi-line.
+- YAML: Fixed parseInlineMap to correctly handle block-scalars and multi-line.
 
 ## [1.0.0] - 2026-06-12
 
