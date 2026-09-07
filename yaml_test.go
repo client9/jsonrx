@@ -365,6 +365,48 @@ outer:
 `, `["first\n","second\n"]`)
 }
 
+// Block scalars as values of a mapping key nested inside a sequence item
+// ("- key: v" / "  value: |-"), which is parsed by parseInlineMap.
+func TestYAMLBlockScalarInSequenceItemMap(t *testing.T) {
+	roundtripYAML(t, `
+- key: a
+  value: |-
+    line one
+    line two
+  after: 1
+`, `[{"key":"a","value":"line one\nline two","after":1}]`)
+
+	roundtripYAML(t, `
+- key: a
+  value: |
+    line one
+  after: 1
+`, `[{"key":"a","value":"line one\n","after":1}]`)
+
+	roundtripYAML(t, `
+- key: a
+  value: >-
+    foo
+    bar
+`, `[{"key":"a","value":"foo bar"}]`)
+
+	// block scalar as the first key of the inline map
+	roundtripYAML(t, `
+- value: |-
+    only
+`, `[{"value":"only"}]`)
+
+	// indented content that itself looks like YAML structure
+	roundtripYAML(t, `
+footnotes:
+  - key: robert1778-baptism
+    value: |-
+      $link[b-1778 "Robert Galbreath"]{
+          Robert lawful son to Samuel Galbraeth + Janet McNair
+      }
+`, `{"footnotes":[{"key":"robert1778-baptism","value":"$link[b-1778 \"Robert Galbreath\"]{\n    Robert lawful son to Samuel Galbraeth + Janet McNair\n}"}]}`)
+}
+
 func TestYAMLFoldedBlockScalar(t *testing.T) {
 	roundtripYAML(t, `
 key: >

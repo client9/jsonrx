@@ -295,6 +295,13 @@ func (p *parser) parseInlineMap(firstLine []byte, virtIndent int, startRawLine i
 			if err := p.parseBlock(virtIndent-1, buf); err != nil {
 				return err
 			}
+		} else if style, chomping, ok := detectBlockScalar(rest); ok {
+			scalar, last, err := p.collectBlockScalar(style, chomping, rawLine, lineCol)
+			if err != nil {
+				return err
+			}
+			p.skipPastRawLine(last)
+			writeJSONString(scalar, buf)
 		} else if isFlowValue(rest) {
 			src, last := p.gatherFlowSrc(rest, rawLine)
 			if err := parseFlowExpr(src, buf); err != nil {
